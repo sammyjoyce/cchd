@@ -89,12 +89,6 @@ pub fn build(b: *std.Build) void {
     const targets = [_]std.Target.Query{
         .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .gnu },
         .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .musl },
-        .{ .cpu_arch = .aarch64, .os_tag = .linux, .abi = .gnu },
-        .{ .cpu_arch = .aarch64, .os_tag = .linux, .abi = .musl },
-        .{ .cpu_arch = .x86_64, .os_tag = .macos },
-        .{ .cpu_arch = .aarch64, .os_tag = .macos },
-        .{ .cpu_arch = .x86_64, .os_tag = .windows },
-        .{ .cpu_arch = .aarch64, .os_tag = .windows },
     };
 
     for (targets) |target_query| {
@@ -131,7 +125,6 @@ pub fn build(b: *std.Build) void {
         target_exe.linkLibrary(target_yyjson);
         target_exe.linkSystemLibrary("curl");
         target_exe.linkLibC();
-
         const arch_str = if (target_query.cpu_arch) |arch| @tagName(arch) else "unknown";
         const os_str = if (target_query.os_tag) |os| @tagName(os) else "unknown";
         const abi_str = if (target_query.abi) |abi| @tagName(abi) else "none";

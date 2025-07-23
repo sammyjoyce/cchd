@@ -67,15 +67,11 @@ jobs:
             # Linux x86_64 (glibc)
             curl -L https://github.com/sammyjoyce/cchd/releases/download/${{ github.ref_name }}/cchd-x86_64-linux-gnu.tar.gz | tar -xz
             
-            # Linux x86_64 (musl)
+            # Linux x86_64 (musl) - for Alpine Linux and other musl-based systems
             curl -L https://github.com/sammyjoyce/cchd/releases/download/${{ github.ref_name }}/cchd-x86_64-linux-musl.tar.gz | tar -xz
-            
-            # macOS x86_64
-            curl -L https://github.com/sammyjoyce/cchd/releases/download/${{ github.ref_name }}/cchd-x86_64-macos-none.tar.gz | tar -xz
-            
-            # macOS ARM64
-            curl -L https://github.com/sammyjoyce/cchd/releases/download/${{ github.ref_name }}/cchd-aarch64-macos-none.tar.gz | tar -xz
             ```
+            
+            **Note:** macOS and Windows binaries are not yet available in this release. Please build from source for these platforms.
 
             ## Verification
 
