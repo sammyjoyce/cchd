@@ -34,7 +34,7 @@ pub fn build(b: *std.Build) void {
 
     exe.addCSourceFile(.{
         .file = b.path("src/cchd.c"),
-        .flags = &.{ "-Wall", "-Wextra", "-std=c11" },
+        .flags = &.{ "-Wall", "-Wextra", "-std=c11", "-D_GNU_SOURCE" },
     });
 
     exe.addIncludePath(yyjson_dep.path("src"));
@@ -125,7 +125,7 @@ pub fn build(b: *std.Build) void {
 
         target_exe.addCSourceFile(.{
             .file = b.path("src/cchd.c"),
-            .flags = &.{ "-Wall", "-Wextra", "-std=c11" },
+            .flags = &.{ "-Wall", "-Wextra", "-std=c11", "-D_GNU_SOURCE" },
         });
 
         target_exe.addIncludePath(yyjson_dep.path("src"));
