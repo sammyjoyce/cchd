@@ -1,0 +1,40 @@
+# Zig build artifacts
+zig-out/
+.zig-cache/
+zig-cache/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test artifacts
+*.pid
+*.log
+test_runner
+
+# Build artifacts
+hook_dispatcher
+*.o
+*.a

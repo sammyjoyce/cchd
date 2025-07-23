@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+
+  pull_request:
+    branches: [main]
+
+jobs:
+  run:
+    runs-on: namespace-profile-default
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Zig
+        uses: mlugg/setup-zig@v2
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcurl4-openssl-dev
+
+      - name: Run `install` step
+        run: zig build install
+
+      - name: Run `check` step
+        run: zig build check
+
+      - name: Run `test` step
+        run: zig build test
+
+      - name: Test binary functionality
+        run: |
+          echo '{"session_id":"test","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo test"}}' | ./zig-out/bin/cchd || true
+          ./zig-out/bin/cchd --help || true
+
+      - name: Test example servers
+        run: |
+          # Test Python server
+          if command -v python3 &> /dev/null; then
+            cd examples
+            pip install flask
+            python3 python_server.py &
+            SERVER_PID=$!
+            sleep 2
+            echo '{"session_id":"test","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ls"}}' | ../zig-out/bin/cchd
+            kill $SERVER_PID || true
+            cd ..
+          fi
+
+          # Test Node.js server
+          if command -v node &> /dev/null; then
+            cd examples
+            npm install
+            node node_server.js &
+            SERVER_PID=$!
+            sleep 2
+            echo '{"session_id":"test","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ls"}}' | ../zig-out/bin/cchd
+            kill $SERVER_PID || true
+            cd ..
+          fi
+
+          # Test Go server
+          if command -v go &> /dev/null; then
+            cd examples
+            go run go_server.go &
+            SERVER_PID=$!
+            sleep 2
+            echo '{"session_id":"test","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ls"}}' | ../zig-out/bin/cchd
+            kill $SERVER_PID || true
+            cd ..
+          fi

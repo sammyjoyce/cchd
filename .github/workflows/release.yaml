@@ -1,0 +1,86 @@
+name: Release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+
+jobs:
+  release:
+    runs-on: namespace-profile-default
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Zig
+        uses: mlugg/setup-zig@v2
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcurl4-openssl-dev
+
+      - name: Set up minisign
+        run: |
+          curl -L https://github.com/jedisct1/minisign/releases/latest/download/minisign-0.12-linux.tar.gz -o minisign.tar.gz
+          tar -xf minisign.tar.gz
+          echo "$GITHUB_WORKSPACE/minisign-linux/x86_64/" >> $GITHUB_PATH
+
+      - name: Run `release` step
+        run: zig build release
+
+      - name: Create release archives
+        run: |
+          cd zig-out/release
+          for dir in */; do
+            triple="${dir%/}"
+            tar -czf "cchd-${triple}.tar.gz" -C "$dir" cchd
+          done
+          cd ../..
+
+      - name: Sign release binaries
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+          MINISIGN_PUBLIC_KEY: ${{ secrets.MINISIGN_PUBLIC_KEY }}
+        run: |
+          echo "$MINISIGN_SECRET_KEY" > minisign.key
+          minisign -S -s minisign.key -m zig-out/release/*.tar.gz
+          echo "$MINISIGN_PUBLIC_KEY" > zig-out/release/minisign.pub
+          rm minisign.key
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            zig-out/release/*.tar.gz
+            zig-out/release/*.tar.gz.minisig
+            zig-out/release/minisign.pub
+          body: |
+            ## Installation
+
+            Download the appropriate binary for your platform and extract:
+
+            ```sh
+            # Linux x86_64 (glibc)
+            curl -L https://github.com/sammyjoyce/cchd/releases/download/${{ github.ref_name }}/cchd-x86_64-linux-gnu.tar.gz | tar -xz
+            
+            # Linux x86_64 (musl)
+            curl -L https://github.com/sammyjoyce/cchd/releases/download/${{ github.ref_name }}/cchd-x86_64-linux-musl.tar.gz | tar -xz
+            
+            # macOS x86_64
+            curl -L https://github.com/sammyjoyce/cchd/releases/download/${{ github.ref_name }}/cchd-x86_64-macos-none.tar.gz | tar -xz
+            
+            # macOS ARM64
+            curl -L https://github.com/sammyjoyce/cchd/releases/download/${{ github.ref_name }}/cchd-aarch64-macos-none.tar.gz | tar -xz
+            ```
+
+            ## Verification
+
+            Archived binary files can be verified as follows:
+            ```sh
+            minisign -Vm <archive> -p minisign.pub
+            ```
+          generate_release_notes: true
