@@ -203,35 +203,6 @@ func handlePreToolUse(data json.RawMessage) HookResponse {
 			log.Printf("File operation %s on: %s", toolData.ToolName, filePath)
 		}
 	}
-		if err := json.Unmarshal(toolData.ToolInput, &fileInput); err == nil {
-			// Check for path traversal
-			if pathTraversalPattern.MatchString(fileInput.FilePath) {
-				return HookResponse{
-					Version:  "1.0",
-					Decision: "block",
-					Reason:   "Path traversal attempt detected",
-				}
-			}
-
-			// Example: Sandbox file operations to specific directories
-			if !strings.HasPrefix(fileInput.FilePath, "/workspace/") &&
-				!strings.HasPrefix(fileInput.FilePath, "/tmp/") {
-				// Modify the path to sandbox it
-				modifiedInput := map[string]any{
-					"file_path": "/workspace" + fileInput.FilePath,
-				}
-				modifiedData, _ := json.Marshal(map[string]any{
-					"tool_input": modifiedInput,
-				})
-
-				return HookResponse{
-					Version:      "1.0",
-					Decision:     "modify",
-					ModifiedData: modifiedData,
-				}
-			}
-		}
-	}
 
 	return HookResponse{Version: "1.0", Decision: "allow"}
 }

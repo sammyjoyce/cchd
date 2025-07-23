@@ -54,14 +54,13 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the hook dispatcher");
     run_step.dependOn(&run_cmd.step);
 
-    const test_runner = b.addExecutable(.{
-        .name = "test_runner",
+    const test_exe = b.addTest(.{
         .root_source_file = b.path("test.zig"),
         .target = target,
         .optimize = optimize,
     });
 
-    const test_cmd = b.addRunArtifact(test_runner);
+    const test_cmd = b.addRunArtifact(test_exe);
     test_cmd.step.dependOn(b.getInstallStep());
 
     const test_step = b.step("test", "Run comprehensive test suite");

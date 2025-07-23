@@ -38,6 +38,7 @@ SENSITIVE_FILES = [
 def handle_hook():
     try:
         data = request.json
+        logging.info(f"Received raw data: {data}")
         event = data.get('event', {})
         event_data = data.get('data', {})
         

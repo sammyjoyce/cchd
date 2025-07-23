@@ -1,4 +1,5 @@
 const std = @import("std");
+const testing = std.testing;
 const builtin = @import("builtin");
 
 const TestServer = struct {
@@ -7,29 +8,20 @@ const TestServer = struct {
     name: []const u8,
 };
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
-    const args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, args);
-
-    std.debug.print("🧪 Hook Dispatcher Test Suite\n", .{});
+test "hook dispatcher test suite" {
+    std.debug.print("\n🧪 Hook Dispatcher Test Suite\n", .{});
     std.debug.print("============================\n\n", .{});
+
+    const allocator = testing.allocator;
 
     // Compile cchd binary
     try runBuild(allocator);
 
-    // Verify fail-open behavior when server is unreachable
+    // Run all tests
     try testNoServer(allocator);
-
-    // Test integration with each example server implementation
     try testPythonServer(allocator);
     try testNodeServer(allocator);
     try testGoServer(allocator);
-
-    std.debug.print("\n✅ All tests passed!\n", .{});
 }
 
 fn runBuild(allocator: std.mem.Allocator) !void {
@@ -42,14 +34,44 @@ fn runBuild(allocator: std.mem.Allocator) !void {
     defer allocator.free(result.stdout);
     defer allocator.free(result.stderr);
 
-    if (result.term.Exited != 0) {
-        std.debug.print("❌ Build failed:\n{s}\n", .{result.stderr});
-        return error.BuildFailed;
-    }
-
+    try testing.expectEqual(@as(u8, 0), result.term.Exited);
     std.debug.print("✓ Build successful\n\n", .{});
 }
 
+test "fail-open behavior when server is unreachable" {
+    const allocator = testing.allocator;
+    try testNoServer(allocator);
+}
+
+test "dispatcher handles invalid JSON input" {
+    const allocator = testing.allocator;
+
+    // Test with invalid JSON
+    const invalid_input = "not valid json";
+
+    const result = try runDispatcher(allocator, invalid_input);
+    defer allocator.free(result.stdout);
+    defer allocator.free(result.stderr);
+
+    // Should exit with error code 1 for invalid JSON
+    try testing.expectEqual(@as(u8, 1), result.term.Exited);
+    try testing.expect(std.mem.indexOf(u8, result.stderr, "Failed to parse input JSON") != null);
+}
+
+test "dispatcher handles missing required fields" {
+    const allocator = testing.allocator;
+
+    // Valid JSON but missing required fields
+    const incomplete_input = "{}";
+
+    const result = try runDispatcher(allocator, incomplete_input);
+    defer allocator.free(result.stdout);
+    defer allocator.free(result.stderr);
+
+    // Should still work in fail-open mode, passing through the input
+    try testing.expectEqual(@as(u8, 0), result.term.Exited);
+    try testing.expectEqualStrings("{}", std.mem.trim(u8, result.stdout, "\n"));
+}
 fn testNoServer(allocator: std.mem.Allocator) !void {
     std.debug.print("🔌 Testing without server (should fail-open)...\n", .{});
 
@@ -62,18 +84,17 @@ fn testNoServer(allocator: std.mem.Allocator) !void {
     defer allocator.free(result.stderr);
 
     // Fail-open: should allow action (exit 0) when server unavailable
-    if (result.term.Exited != 0) {
-        std.debug.print("❌ Expected exit code 0, got {}\n", .{result.term.Exited});
-        return error.TestFailed;
-    }
+    try testing.expectEqual(@as(u8, 0), result.term.Exited);
 
     // Should pass through original event data unchanged
-    if (std.mem.indexOf(u8, result.stdout, "session_id") == null) {
-        std.debug.print("❌ Expected output to contain original input\n", .{});
-        return error.TestFailed;
-    }
+    try testing.expect(std.mem.indexOf(u8, result.stdout, "session_id") != null);
 
     std.debug.print("✓ Fail-open behavior working correctly\n\n", .{});
+}
+
+test "Python server integration" {
+    const allocator = testing.allocator;
+    try testPythonServer(allocator);
 }
 
 fn testPythonServer(allocator: std.mem.Allocator) !void {
@@ -102,11 +123,16 @@ fn testPythonServer(allocator: std.mem.Allocator) !void {
     allocator.free(flask_check.stdout);
     allocator.free(flask_check.stderr);
 
-    var server = try startServer(allocator, &[_][]const u8{ "python3", "examples/python_server.py" }, 8080, "Python");
+    var server = try startServer(allocator, &[_][]const u8{ "./venv/bin/python3", "examples/python_server.py" }, 8080, "Python");
     defer stopServer(&server);
 
     try runServerTests(allocator, "Python");
     std.debug.print("✓ Python server tests passed\n\n", .{});
+}
+
+test "Node.js server integration" {
+    const allocator = testing.allocator;
+    try testNodeServer(allocator);
 }
 
 fn testNodeServer(allocator: std.mem.Allocator) !void {
@@ -135,6 +161,11 @@ fn testNodeServer(allocator: std.mem.Allocator) !void {
 
     try runServerTests(allocator, "Node.js");
     std.debug.print("✓ Node.js server tests passed\n\n", .{});
+}
+
+test "Go server integration" {
+    const allocator = testing.allocator;
+    try testGoServer(allocator);
 }
 
 fn testGoServer(allocator: std.mem.Allocator) !void {
@@ -170,10 +201,7 @@ fn runServerTests(allocator: std.mem.Allocator, server_type: []const u8) !void {
         defer allocator.free(result.stdout);
         defer allocator.free(result.stderr);
 
-        if (result.term.Exited != 0) {
-            std.debug.print("❌\n    Expected exit code 0, got {}\n", .{result.term.Exited});
-            return error.TestFailed;
-        }
+        try testing.expectEqual(@as(u8, 0), result.term.Exited);
         std.debug.print("✓\n", .{});
     }
 
@@ -196,20 +224,12 @@ fn runServerTests(allocator: std.mem.Allocator, server_type: []const u8) !void {
         defer allocator.free(result.stdout);
         defer allocator.free(result.stderr);
 
-        if (result.term.Exited != 1) {
-            std.debug.print("❌\n    Expected exit code 1, got {}\n", .{result.term.Exited});
-            std.debug.print("    Server type: {s}\n", .{server_type});
-            std.debug.print("    stderr: {s}\n", .{result.stderr});
-            return error.TestFailed;
-        }
+        try testing.expectEqual(@as(u8, 1), result.term.Exited);
 
         // Verify block reason is reported to user
-        if (std.mem.indexOf(u8, result.stderr, "Blocked") == null and
-            std.mem.indexOf(u8, result.stderr, "blocked") == null)
-        {
-            std.debug.print("❌\n    Expected block reason in stderr\n", .{});
-            return error.TestFailed;
-        }
+        const has_block_msg = std.mem.indexOf(u8, result.stderr, "Blocked") != null or
+            std.mem.indexOf(u8, result.stderr, "blocked") != null;
+        try testing.expect(has_block_msg);
         std.debug.print("✓\n", .{});
     }
 
@@ -224,10 +244,7 @@ fn runServerTests(allocator: std.mem.Allocator, server_type: []const u8) !void {
         defer allocator.free(result.stdout);
         defer allocator.free(result.stderr);
 
-        if (result.term.Exited != 0) {
-            std.debug.print("❌\n    Expected exit code 0, got {}\n", .{result.term.Exited});
-            return error.TestFailed;
-        }
+        try testing.expectEqual(@as(u8, 0), result.term.Exited);
         std.debug.print("✓\n", .{});
     }
 
@@ -245,17 +262,11 @@ fn runServerTests(allocator: std.mem.Allocator, server_type: []const u8) !void {
         defer allocator.free(result.stdout);
         defer allocator.free(result.stderr);
 
-        if (result.term.Exited != 0) {
-            std.debug.print("❌\n    Expected exit code 0 for modify, got {}\n", .{result.term.Exited});
-            return error.TestFailed;
-        }
+        try testing.expectEqual(@as(u8, 0), result.term.Exited);
 
         // Verify modifications applied
-        if (std.mem.indexOf(u8, result.stdout, if (std.mem.eql(u8, server_type, "Python")) "/safe/tmp/" else "Claude-Hooks-Safety") == null) {
-            std.debug.print("❌\n    Expected modified output not found\n", .{});
-            std.debug.print("    stdout: {s}\n", .{result.stdout});
-            return error.TestFailed;
-        }
+        const expected_content = if (std.mem.eql(u8, server_type, "Python")) "/safe/tmp/" else "Claude-Hooks-Safety";
+        try testing.expect(std.mem.indexOf(u8, result.stdout, expected_content) != null);
         std.debug.print("✓\n", .{});
     }
 }
