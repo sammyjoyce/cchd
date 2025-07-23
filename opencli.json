@@ -1,0 +1,107 @@
+{
+  "opencli": "0.1",
+  "info": {
+    "title": "Claude Code Hooks Dispatcher",
+    "description": "A lightweight bridge between Claude Code hooks and custom HTTP servers. Designed for safety, performance, and developer experience.",
+    "version": "0.1.0",
+    "contact": {
+      "name": "Sam Joyce",
+      "url": "https://github.com/sammyjoyce/cchd"
+    },
+    "license": {
+      "name": "MIT License",
+      "identifier": "MIT"
+    }
+  },
+  "conventions": {
+    "groupOptions": false,
+    "optionArgumentSeparator": " "
+  },
+  "arguments": [],
+  "options": [
+    {
+      "name": "server",
+      "required": false,
+      "aliases": [],
+      "arguments": [
+        {
+          "name": "url",
+          "required": true,
+          "ordinal": 1,
+          "arity": {
+            "minimum": 1,
+            "maximum": 1
+          },
+          "description": "HTTP server endpoint URL"
+        }
+      ],
+      "description": "Specify the HTTP server endpoint (default: http://localhost:8080/hook)"
+    },
+    {
+      "name": "timeout",
+      "required": false,
+      "aliases": [],
+      "arguments": [
+        {
+          "name": "milliseconds",
+          "required": true,
+          "ordinal": 1,
+          "arity": {
+            "minimum": 1,
+            "maximum": 1
+          },
+          "description": "Timeout value in milliseconds"
+        }
+      ],
+      "description": "Request timeout in milliseconds (default: 5000)"
+    },
+    {
+      "name": "fail-closed",
+      "required": false,
+      "aliases": [],
+      "arguments": [],
+      "description": "Block operations if server is unavailable (default: fail-open)"
+    }
+  ],
+  "commands": [],
+  "exitCodes": [
+    {
+      "code": 0,
+      "description": "Success - operation allowed or modified"
+    },
+    {
+      "code": 1,
+      "description": "Failure - operation blocked or error occurred"
+    }
+  ],
+  "examples": [
+    "echo '{\"session_id\":\"test123\",\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"ls\"}}' | cchd",
+    "echo '{\"session_id\":\"test123\",\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"ls\"}}' | cchd --server http://localhost:8080/hook",
+    "echo '{\"session_id\":\"test123\",\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"ls\"}}' | cchd --timeout 10000 --fail-closed"
+  ],
+  "interactive": false,
+  "metadata": [
+    {
+      "name": "input",
+      "value": {
+        "type": "stdin",
+        "format": "json",
+        "description": "Reads Claude hook event JSON from stdin"
+      }
+    },
+    {
+      "name": "output",
+      "value": {
+        "type": "stdout",
+        "format": "json",
+        "description": "Outputs original or modified JSON to stdout"
+      }
+    },
+    {
+      "name": "environment",
+      "value": {
+        "HOOK_SERVER_URL": "Can be used to set default server URL instead of --server flag"
+      }
+    }
+  ]
+}

@@ -3,6 +3,7 @@
 [![CI](https://github.com/sammyjoyce/cchd/actions/workflows/ci.yaml/badge.svg)](https://github.com/sammyjoyce/cchd/actions/workflows/ci.yaml)
 [![Release](https://img.shields.io/github/v/release/sammyjoyce/cchd)](https://github.com/sammyjoyce/cchd/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![C](https://img.shields.io/badge/C-11-blue.svg)](https://en.wikipedia.org/wiki/C11_(C_standard_revision))
 [![Zig Version](https://img.shields.io/badge/Zig-0.14.1-orange.svg)](https://ziglang.org/)
 
 > The fundamental problem of communication is that of reproducing at one point either exactly or approximately a message selected at another point.” — Claude Shannon
@@ -242,6 +243,10 @@ Runtime: libcurl (yyjson static-linked).
 - Linux libcurl: `apt install libcurl4-openssl-dev` (Ubuntu), etc.
 - Not in PATH: Add `/usr/local/bin`.
 - Hooks fail: Check Claude version, JSON syntax, server, manual test.
+
+## OpenCLI Compliance
+
+This project adheres to the [OpenCLI specification](https://opencli.org/). The CLI interface is documented in `opencli.json`, which can be used by documentation generators, auto-completion tools, and other OpenCLI-compatible utilities.
 
 ## License
 

@@ -43,10 +43,6 @@ pub fn build(b: *std.Build) void {
     exe.linkSystemLibrary("curl");
     exe.linkLibC();
 
-    if (target.result.os.tag == .linux) {
-        exe.linkage = .static;
-    }
-
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);
@@ -136,10 +132,6 @@ pub fn build(b: *std.Build) void {
         target_exe.linkLibrary(target_yyjson);
         target_exe.linkSystemLibrary("curl");
         target_exe.linkLibC();
-
-        if (target_query.os_tag == .linux) {
-            target_exe.linkage = .static;
-        }
 
         const arch_str = if (target_query.cpu_arch) |arch| @tagName(arch) else "unknown";
         const os_str = if (target_query.os_tag) |os| @tagName(os) else "unknown";
