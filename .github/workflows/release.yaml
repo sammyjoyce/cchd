@@ -5,11 +5,16 @@ on:
     tags: ["v[0-9]+.[0-9]+.[0-9]+"]
 
 jobs:
-  release:
-    runs-on: namespace-profile-default
-
-    permissions:
-      contents: write
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: namespace-profile-default
+            targets: "linux"
+          - os: namespace-profile-macos
+            targets: "macos"
+    
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Check out repository
@@ -18,10 +23,75 @@ jobs:
       - name: Set up Zig
         uses: mlugg/setup-zig@v2
 
-      - name: Install dependencies
+      - name: Install dependencies (Linux)
+        if: matrix.targets == 'linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libcurl4-openssl-dev
+
+      - name: Install dependencies (macOS)
+        if: matrix.targets == 'macos'
+        run: |
+          # curl should already be available on macOS
+          echo "Using system curl"
+
+      - name: Build for Linux targets
+        if: matrix.targets == 'linux'
+        run: |
+          zig build -Dtarget=x86_64-linux-gnu -Doptimize=ReleaseSafe
+          mkdir -p release/x86_64-linux-gnu
+          cp zig-out/bin/cchd release/x86_64-linux-gnu/
+          
+          zig build -Dtarget=x86_64-linux-musl -Doptimize=ReleaseSafe
+          mkdir -p release/x86_64-linux-musl
+          cp zig-out/bin/cchd release/x86_64-linux-musl/
+
+      - name: Build for macOS targets
+        if: matrix.targets == 'macos'
+        run: |
+          zig build -Dtarget=x86_64-macos -Doptimize=ReleaseSafe
+          mkdir -p release/x86_64-macos-none
+          cp zig-out/bin/cchd release/x86_64-macos-none/
+          
+          zig build -Dtarget=aarch64-macos -Doptimize=ReleaseSafe
+          mkdir -p release/aarch64-macos-none
+          cp zig-out/bin/cchd release/aarch64-macos-none/
+
+      - name: Create release archives
+        run: |
+          cd release
+          for dir in */; do
+            triple="${dir%/}"
+            tar -czf "cchd-${triple}.tar.gz" -C "$dir" cchd
+          done
+          cd ..
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.targets }}
+          path: release/*.tar.gz
+
+  release:
+    needs: build
+    runs-on: namespace-profile-default
+    
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          mv artifacts/*/*.tar.gz release/
 
       - name: Set up minisign
         run: |
@@ -29,55 +99,41 @@ jobs:
           tar -xf minisign.tar.gz
           echo "$GITHUB_WORKSPACE/minisign-linux/x86_64/" >> $GITHUB_PATH
 
-      - name: Run `release` step
-        run: zig build release
-
-      - name: Create release archives
-        run: |
-          cd zig-out/release
-          for dir in */; do
-            triple="${dir%/}"
-            tar -czf "cchd-${triple}.tar.gz" -C "$dir" cchd
-          done
-          cd ../..
-
       - name: Sign release binaries
         env:
           MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
           MINISIGN_PUBLIC_KEY: ${{ secrets.MINISIGN_PUBLIC_KEY }}
         run: |
           echo "$MINISIGN_SECRET_KEY" > minisign.key
-          minisign -S -s minisign.key -m zig-out/release/*.tar.gz
-          echo "$MINISIGN_PUBLIC_KEY" > zig-out/release/minisign.pub
+          minisign -S -s minisign.key -m release/*.tar.gz
+          echo "$MINISIGN_PUBLIC_KEY" > release/minisign.pub
           rm minisign.key
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            zig-out/release/*.tar.gz
-            zig-out/release/*.tar.gz.minisig
-            zig-out/release/minisign.pub
+            release/*.tar.gz
+            release/*.tar.gz.minisig
+            release/minisign.pub
           body: |
             ## Installation
 
             Download the appropriate binary for your platform and extract:
 
             ```sh
+            # macOS x86_64 (Intel)
+            curl -L https://github.com/sammyjoyce/cchd/releases/download/${{ github.ref_name }}/cchd-x86_64-macos-none.tar.gz | tar -xz
+            
+            # macOS ARM64 (Apple Silicon)
+            curl -L https://github.com/sammyjoyce/cchd/releases/download/${{ github.ref_name }}/cchd-aarch64-macos-none.tar.gz | tar -xz
+            
             # Linux x86_64 (glibc)
             curl -L https://github.com/sammyjoyce/cchd/releases/download/${{ github.ref_name }}/cchd-x86_64-linux-gnu.tar.gz | tar -xz
             
             # Linux x86_64 (musl) - for Alpine Linux and other musl-based systems
             curl -L https://github.com/sammyjoyce/cchd/releases/download/${{ github.ref_name }}/cchd-x86_64-linux-musl.tar.gz | tar -xz
-            
-            # Linux ARM64 (glibc)
-            curl -L https://github.com/sammyjoyce/cchd/releases/download/${{ github.ref_name }}/cchd-aarch64-linux-gnu.tar.gz | tar -xz
-            
-            # Linux ARM64 (musl) - for Alpine Linux and other musl-based systems
-            curl -L https://github.com/sammyjoyce/cchd/releases/download/${{ github.ref_name }}/cchd-aarch64-linux-musl.tar.gz | tar -xz
             ```
-            
-            **Note:** macOS and Windows binaries are not yet available. Please build from source for these platforms.
 
             ## Verification
 
