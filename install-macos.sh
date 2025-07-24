@@ -244,11 +244,9 @@ echo
 
 check_prerequisites
 
-local platform_arch
 platform_arch=$(detect_architecture)
 echo "Detected architecture: ${platform_arch}-${PLATFORM}"
 
-local temp_directory
 temp_directory=$(mktemp -d)
 trap 'rm -rf "$temp_directory"' EXIT
 
@@ -256,18 +254,14 @@ echo
 echo "📥 Downloading cchd..."
 echo "Fetching latest release information..."
 
-local release_information
 release_information=$(fetch_release_information)
 
-local download_url
 download_url=$(extract_download_url "$release_information" "$platform_arch")
 
-local version
 version=$(extract_version "$release_information")
 echo "Latest version: $version"
 
 echo "Downloading from: $download_url"
-local archive_path
 archive_path=$(download_binary_archive "$download_url" "$temp_directory")
 
 verify_signature_if_possible "$release_information" "$archive_path" "$temp_directory"
