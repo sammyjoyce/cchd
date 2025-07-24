@@ -42,7 +42,6 @@ pub fn build(b: *std.Build) void {
     exe.linkLibrary(yyjson);
     exe.linkSystemLibrary("curl");
     exe.linkLibC();
-
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);
