@@ -106,18 +106,23 @@ jobs:
           MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
           MINISIGN_PUBLIC_KEY: ${{ secrets.MINISIGN_PUBLIC_KEY }}
         run: |
-          echo "$MINISIGN_SECRET_KEY" > minisign.key
-          minisign -S -s minisign.key -m release/*.tar.gz
-          echo "$MINISIGN_PUBLIC_KEY" > release/minisign.pub
-          rm minisign.key
+          if [ -n "$MINISIGN_SECRET_KEY" ] && [ -n "$MINISIGN_PUBLIC_KEY" ]; then
+            echo "Signing release binaries..."
+            echo "$MINISIGN_SECRET_KEY" > minisign.key
+            minisign -S -s minisign.key -m release/*.tar.gz
+            echo "$MINISIGN_PUBLIC_KEY" > release/minisign.pub
+            rm minisign.key
+          else
+            echo "Skipping signing - minisign secrets not configured"
+          fi
 
+      - name: List release files
+        run: ls -la release/
+        
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            release/*.tar.gz
-            release/*.tar.gz.minisig
-            release/minisign.pub
+          files: release/*
           body: |
             ## Installation
 
@@ -138,7 +143,7 @@ jobs:
 
             ## Verification
 
-            Archived binary files can be verified as follows:
+            If signed, archived binary files can be verified as follows:
             ```sh
             minisign -Vm <archive> -p minisign.pub
             ```
