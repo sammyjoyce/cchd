@@ -26,7 +26,7 @@ elif [[ "$arch" == "x86_64" ]]; then
 fi
 
 # Construct filename based on the release naming convention
-filename="$APP-$arch-$os-none.tar.gz"
+filename="$APP-$arch-apple-darwin.tar.gz"
 
 # Validate platform support
 case "$filename" in
@@ -92,6 +92,7 @@ check_version() {
 verify_signature() {
     local archive_path=$1
     local temp_dir=$2
+    local download_url=$3
     
     if ! command -v minisign >/dev/null 2>&1; then
         print_message warning "Skipping signature verification (minisign not installed)"
@@ -100,7 +101,7 @@ verify_signature() {
     fi
     
     # Download signature and public key
-    local sig_url="${url}.minisig"
+    local sig_url="${download_url}.minisig"
     local pubkey_url="https://github.com/$REPO/releases/latest/download/minisign.pub"
     
     print_message info "Downloading signature..."
@@ -133,7 +134,7 @@ download_and_install() {
     curl -# -L -o "$filename" "$url"
     
     # Verify signature if possible
-    verify_signature "$filename" "$temp_dir"
+    verify_signature "$filename" "$temp_dir" "$url"
     
     # Extract and install
     tar -xzf "$filename"
