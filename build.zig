@@ -86,9 +86,13 @@ pub fn build(b: *std.Build) void {
 
     const release_step = b.step("release", "Build release binaries for all targets");
 
+    // For now, only build for Linux targets where curl is available
+    // TODO: Add macOS and Windows support with proper curl handling
     const targets = [_]std.Target.Query{
         .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .gnu },
         .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .musl },
+        .{ .cpu_arch = .aarch64, .os_tag = .linux, .abi = .gnu },
+        .{ .cpu_arch = .aarch64, .os_tag = .linux, .abi = .musl },
     };
 
     for (targets) |target_query| {
