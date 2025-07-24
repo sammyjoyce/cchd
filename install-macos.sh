@@ -30,7 +30,7 @@ filename="$APP-$arch-apple-darwin.tar.gz"
 
 # Validate platform support
 case "$filename" in
-    *"-macos-"*)
+    *"-apple-darwin"*)
         [[ "$arch" == "x86_64" || "$arch" == "aarch64" ]] || {
             echo -e "${RED}Unsupported architecture: $arch${NC}"
             exit 1
