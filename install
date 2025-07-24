@@ -81,10 +81,59 @@ check_version() {
     fi
 }
 
+verify_signature() {
+    local file=$1
+    local sig_file="${file}.minisig"
+    local pub_key="minisign.pub"
+    
+    # Download signature and public key
+    curl -sL "${url}.minisig" -o "$sig_file"
+    
+    # Construct public key URL based on whether we're using latest or specific version
+    local pub_key_url
+    if [ -z "$requested_version" ]; then
+        pub_key_url="https://github.com/sammyjoyce/cchd/releases/latest/download/minisign.pub"
+    else
+        pub_key_url="https://github.com/sammyjoyce/cchd/releases/download/v${requested_version}/minisign.pub"
+    fi
+    
+    curl -sL "$pub_key_url" -o "$pub_key"
+    
+    if [[ -f "$sig_file" && -f "$pub_key" ]]; then
+        if minisign -Vm "$file" -p "$pub_key" >/dev/null 2>&1; then
+            print_message info "✓ Signature verified successfully"
+            return 0
+        else
+            print_message error "✗ Signature verification failed!"
+            return 1
+        fi
+    else
+        print_message warning "Could not download signature files"
+        return 1
+    fi
+}
+
 download_and_install() {
     print_message info "Downloading ${ORANGE}cchd ${GREEN}version: ${YELLOW}$specific_version ${GREEN}..."
     mkdir -p cchdtmp && cd cchdtmp
-    curl -# -L $url | tar xz
+    
+    # Download the archive file first
+    curl -# -L $url -o "$filename"
+    
+    # Verify signature if minisign is available
+    if command -v minisign >/dev/null 2>&1; then
+        print_message info "Verifying signature with minisign..."
+        if ! verify_signature "$filename"; then
+            print_message warning "Signature verification failed, but continuing installation"
+            print_message info "To verify signatures, install minisign: https://jedisct1.github.io/minisign/"
+        fi
+    else
+        print_message info "Minisign not found, skipping signature verification"
+        print_message info "To verify signatures, install minisign: https://jedisct1.github.io/minisign/"
+    fi
+    
+    # Extract the archive
+    tar xzf "$filename"
     
     # The archive contains just 'cchd'
     if [[ ! -f "cchd" ]]; then
@@ -184,3 +233,106 @@ if [ -n "${GITHUB_ACTIONS-}" ] && [ "${GITHUB_ACTIONS}" == "true" ]; then
     echo "$INSTALL_DIR" >> $GITHUB_PATH
     print_message info "Added $INSTALL_DIR to \$GITHUB_PATH"
 fi
+
+# Setup Claude settings.json if it doesn't exist
+setup_claude_settings() {
+    local claude_dir="$HOME/.claude"
+    local settings_file="$claude_dir/settings.json"
+    
+    if [[ ! -f "$settings_file" ]]; then
+        print_message info "Setting up Claude settings.json..."
+        mkdir -p "$claude_dir"
+        
+        cat > "$settings_file" << 'EOF'
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cchd"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cchd"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cchd"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cchd"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cchd"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cchd"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cchd"
+          }
+        ]
+      }
+    ]
+  }
+}
+EOF
+        print_message info "Created $settings_file with default hooks configuration"
+    else
+        print_message info "Claude settings.json already exists at $settings_file"
+    fi
+}
+
+setup_claude_settings
+
+# Final success message
+print_message info ""
+print_message info "🎉 ${ORANGE}cchd ${GREEN}v${YELLOW}$specific_version${GREEN} installed successfully!"
+print_message info ""
+print_message info "Quick start templates available at:"
+print_message info "  https://github.com/sammyjoyce/cchd#quick-start-templates"
