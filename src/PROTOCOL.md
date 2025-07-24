@@ -23,7 +23,7 @@ All requests are sent as HTTP POST to the server endpoint with JSON body:
     "name": "PreToolUse",
     "timestamp": 1234567890123,
     "session_id": "session-123",
-    "correlation_id": "correlation-456"
+    "correlation_id": "correlation-456"  // Optional, present when available
   },
   "data": {
     // Event-specific data
@@ -59,7 +59,8 @@ All requests are sent as HTTP POST to the server endpoint with JSON body:
 #### UserPromptSubmit
 ```json
 {
-  "prompt": "User's prompt text"
+  "prompt": "User's prompt text",
+  "current_working_directory": "/path/to/cwd"
 }
 ```
 
@@ -109,6 +110,20 @@ All requests are sent as HTTP POST to the server endpoint with JSON body:
     "hookEventName": "PreToolUse",
     "permissionDecision": "allow|deny|ask",  // Modern permission control
     "permissionDecisionReason": "Reason shown to user or Claude"
+  }
+}
+```
+
+#### UserPromptSubmit Advanced Response
+
+For UserPromptSubmit hooks, servers can provide additional context in the response:
+
+```json
+{
+  "version": "1.0",
+  "hookSpecificOutput": {
+    "hookEventName": "UserPromptSubmit",
+    "additionalContext": "Additional information to include with the prompt"
   }
 }
 ```
@@ -237,6 +252,13 @@ app.post('/hook', (req, res) => {
 
 app.listen(8080);
 ```
+
+## Environment Variables
+
+Hook commands receive the following environment variables:
+
+- `CLAUDE_PROJECT_DIR`: The current project directory (v1.0.58+)
+- `HOOK_SERVER_URL`: Override the default server URL
 
 ## Configuration
 

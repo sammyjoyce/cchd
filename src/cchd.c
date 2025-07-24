@@ -188,6 +188,15 @@ static yyjson_mut_val *build_event_object(yyjson_mut_doc *output_doc,
   assert(true == yyjson_mut_obj_add_strcpy(output_doc, event_object,
                                            "session_id", session_id));
 
+  // Get correlation ID from input if present
+  yyjson_val *correlation_id_value =
+      yyjson_obj_get(input_root, "correlation_id");
+  if (yyjson_is_str(correlation_id_value)) {
+    assert(true ==
+           yyjson_mut_obj_add_strcpy(output_doc, event_object, "correlation_id",
+                                     yyjson_get_str(correlation_id_value)));
+  }
+
   return event_object;
 }
 
@@ -293,6 +302,16 @@ static bool add_user_prompt_submit_specific_fields(yyjson_mut_doc *output_doc,
   if (yyjson_is_str(prompt_value)) {
     if (!yyjson_mut_obj_add_strcpy(output_doc, data_object, "prompt",
                                    yyjson_get_str(prompt_value))) {
+      return false;
+    }
+  }
+
+  yyjson_val *cwd_value =
+      yyjson_obj_get(input_root, "current_working_directory");
+  if (yyjson_is_str(cwd_value)) {
+    if (!yyjson_mut_obj_add_strcpy(output_doc, data_object,
+                                   "current_working_directory",
+                                   yyjson_get_str(cwd_value))) {
       return false;
     }
   }

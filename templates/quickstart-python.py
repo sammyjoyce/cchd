@@ -40,9 +40,16 @@ async def handle_pre_tool_use(event_data):
         # Add your security logic here
         print(f"  Command: {command}")
     
-    # Return decision: "approve", "block", or "modify"
+    # Return decision using modern format (v1.0.59+)
     return {
         'version': '1.0',
+        # Option 1: Modern permission control (preferred)
+        # 'hookSpecificOutput': {
+        #     'hookEventName': 'PreToolUse',
+        #     'permissionDecision': 'allow',  # or 'deny' or 'ask'
+        #     'permissionDecisionReason': 'Command is safe'
+        # },
+        # Option 2: Legacy format
         # 'decision': 'block',
         # 'reason': 'Dangerous command detected',
         'timestamp': datetime.now().isoformat()
@@ -70,14 +77,22 @@ async def handle_user_prompt_submit(event_data):
     """Handle UserPromptSubmit events - validate or modify user prompts"""
     prompt = event_data.get('prompt', '')
     session_id = event_data.get('session_id', '')
+    cwd = event_data.get('current_working_directory', '')
     
     print(f"[UserPromptSubmit] Session: {session_id}")
     print(f"  Prompt: {prompt}")
+    print(f"  CWD: {cwd}")
     
     # Add your prompt validation logic here
     
     return {
         'version': '1.0',
+        # Option 1: Add additional context (v1.0.59+)
+        # 'hookSpecificOutput': {
+        #     'hookEventName': 'UserPromptSubmit',
+        #     'additionalContext': 'Remember to follow security guidelines'
+        # },
+        # Option 2: Block the prompt
         # 'decision': 'block',
         # 'reason': 'Prompt contains sensitive information',
         'timestamp': datetime.now().isoformat()

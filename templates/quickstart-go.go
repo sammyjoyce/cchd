@@ -41,11 +41,20 @@ type EventMetadata struct {
 
 // Response represents the webhook response
 type Response struct {
-	Version      string                 `json:"version,omitempty"`
-	Decision     string                 `json:"decision,omitempty"`
-	Reason       string                 `json:"reason,omitempty"`
-	ModifiedData map[string]interface{} `json:"modified_data,omitempty"`
-	Timestamp    string                 `json:"timestamp"`
+	Version            string                 `json:"version,omitempty"`
+	Decision           string                 `json:"decision,omitempty"`
+	Reason             string                 `json:"reason,omitempty"`
+	ModifiedData       map[string]interface{} `json:"modified_data,omitempty"`
+	HookSpecificOutput *HookSpecificOutput    `json:"hookSpecificOutput,omitempty"`
+	Timestamp          string                 `json:"timestamp"`
+}
+
+// HookSpecificOutput for modern hook responses (v1.0.59+)
+type HookSpecificOutput struct {
+	HookEventName            string `json:"hookEventName"`
+	PermissionDecision       string `json:"permissionDecision,omitempty"`
+	PermissionDecisionReason string `json:"permissionDecisionReason,omitempty"`
+	AdditionalContext        string `json:"additionalContext,omitempty"`
 }
 
 // Handler functions for each event type
@@ -67,9 +76,16 @@ func handlePreToolUse(event HookEvent) Response {
 		}
 	}
 
-	// Return decision: "approve", "block", or "modify"
+	// Return decision using modern format (v1.0.59+)
 	return Response{
 		Version: "1.0",
+		// Option 1: Modern permission control (preferred)
+		// HookSpecificOutput: &HookSpecificOutput{
+		//     HookEventName:            "PreToolUse",
+		//     PermissionDecision:       "allow", // or "deny" or "ask"
+		//     PermissionDecisionReason: "Command is safe",
+		// },
+		// Option 2: Legacy format
 		// Decision: "block",
 		// Reason: "Dangerous command detected",
 		Timestamp: time.Now().Format(time.RFC3339),
@@ -97,14 +113,22 @@ func handlePostToolUse(event HookEvent) Response {
 func handleUserPromptSubmit(event HookEvent) Response {
 	// Extract prompt
 	prompt, _ := event.Data["prompt"].(string)
+	cwd, _ := event.Data["current_working_directory"].(string)
 
 	fmt.Printf("[UserPromptSubmit] Session: %s\n", event.Event.SessionID)
 	fmt.Printf("  Prompt: %s\n", prompt)
+	fmt.Printf("  CWD: %s\n", cwd)
 
 	// Add your prompt validation logic here
 
 	return Response{
 		Version: "1.0",
+		// Option 1: Add additional context (v1.0.59+)
+		// HookSpecificOutput: &HookSpecificOutput{
+		//     HookEventName:     "UserPromptSubmit",
+		//     AdditionalContext: "Remember to follow security guidelines",
+		// },
+		// Option 2: Block the prompt
 		// Decision: "block",
 		// Reason: "Prompt contains sensitive information",
 		Timestamp: time.Now().Format(time.RFC3339),

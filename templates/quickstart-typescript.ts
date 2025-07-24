@@ -30,6 +30,12 @@ interface HookResponse {
   decision?: string;
   reason?: string;
   modified_data?: Record<string, any>;
+  hookSpecificOutput?: {
+    hookEventName: string;
+    permissionDecision?: string;
+    permissionDecisionReason?: string;
+    additionalContext?: string;
+  };
   timestamp: string;
 }
 
@@ -52,9 +58,16 @@ function handlePreToolUse(event: HookEvent): HookResponse {
     console.log(`  Command: ${command}`);
   }
 
-  // Return decision: "approve", "block", or "modify"
+  // Return decision using modern format (v1.0.59+)
   return {
     version: "1.0",
+    // Option 1: Modern permission control (preferred)
+    // hookSpecificOutput: {
+    //   hookEventName: "PreToolUse",
+    //   permissionDecision: "allow", // or "deny" or "ask"
+    //   permissionDecisionReason: "Command is safe"
+    // },
+    // Option 2: Legacy format
     // decision: "block",
     // reason: "Dangerous command detected",
     timestamp: new Date().toISOString(),
@@ -83,15 +96,23 @@ function handlePostToolUse(event: HookEvent): HookResponse {
 function handleUserPromptSubmit(event: HookEvent): HookResponse {
   // Extract prompt
   const prompt = event.data.prompt || "";
+  const cwd = event.data.current_working_directory || "";
   const sessionId = event.event.session_id;
 
   console.log(`[UserPromptSubmit] Session: ${sessionId}`);
   console.log(`  Prompt: ${prompt}`);
+  console.log(`  CWD: ${cwd}`);
 
   // Add your prompt validation logic here
 
   return {
     version: "1.0",
+    // Option 1: Add additional context (v1.0.59+)
+    // hookSpecificOutput: {
+    //   hookEventName: "UserPromptSubmit",
+    //   additionalContext: "Remember to follow security guidelines"
+    // },
+    // Option 2: Block the prompt
     // decision: "block",
     // reason: "Prompt contains sensitive information",
     timestamp: new Date().toISOString(),

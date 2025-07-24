@@ -20,15 +20,15 @@ test "hook dispatcher test suite" {
     // Run all tests
     try testNoServer(allocator);
 
-    // Skip server tests in CI environment
+    // Test template servers
     const ci_env = std.process.getEnvVarOwned(allocator, "CI") catch null;
     if (ci_env) |ci| {
         defer allocator.free(ci);
-        std.debug.print("⚠️  Running in CI environment, skipping server integration tests\n\n", .{});
+        std.debug.print("⚠️  Running in CI environment, skipping template server tests\n\n", .{});
     } else {
-        try testPythonServer(allocator);
-        try testNodeServer(allocator);
-        try testGoServer(allocator);
+        try testPythonTemplate(allocator);
+        try testTypeScriptTemplate(allocator);
+        try testGoTemplate(allocator);
     }
 }
 
@@ -100,7 +100,7 @@ fn testNoServer(allocator: std.mem.Allocator) !void {
     std.debug.print("✓ Fail-open behavior working correctly\n\n", .{});
 }
 
-test "Python server integration" {
+test "Python template server" {
     const allocator = testing.allocator;
 
     // Skip in CI environment
@@ -110,43 +110,59 @@ test "Python server integration" {
         return;
     }
 
-    try testPythonServer(allocator);
+    try testPythonTemplate(allocator);
 }
 
-fn testPythonServer(allocator: std.mem.Allocator) !void {
-    std.debug.print("🐍 Testing Python server...\n", .{});
+fn testPythonTemplate(allocator: std.mem.Allocator) !void {
+    std.debug.print("🐍 Testing Python template server...\n", .{});
 
-    // Verify Python runtime available
-    const python_check = std.process.Child.run(.{
+    // Check if uv is available
+    const uv_check = std.process.Child.run(.{
         .allocator = allocator,
-        .argv = &[_][]const u8{ "python3", "--version" },
+        .argv = &[_][]const u8{ "uv", "--version" },
     }) catch {
-        std.debug.print("⚠️  Python not available, skipping Python tests\n\n", .{});
+        // Try with python3 directly
+        const python_check = std.process.Child.run(.{
+            .allocator = allocator,
+            .argv = &[_][]const u8{ "python3", "--version" },
+        }) catch {
+            std.debug.print("⚠️  Neither uv nor Python available, skipping Python template tests\n\n", .{});
+            return;
+        };
+        allocator.free(python_check.stdout);
+        allocator.free(python_check.stderr);
+
+        // Check for aiohttp
+        const aiohttp_check = std.process.Child.run(.{
+            .allocator = allocator,
+            .argv = &[_][]const u8{ "python3", "-c", "import aiohttp" },
+        }) catch {
+            std.debug.print("⚠️  aiohttp not installed, skipping Python template tests\n", .{});
+            std.debug.print("   Install with: pip install aiohttp\n\n", .{});
+            return;
+        };
+        allocator.free(aiohttp_check.stdout);
+        allocator.free(aiohttp_check.stderr);
+
+        var server = try startServer(allocator, &[_][]const u8{ "python3", "templates/quickstart-python.py" }, 8080, "Python Template");
+        defer stopServer(&server);
+
+        try runTemplateTests(allocator, "Python Template");
+        std.debug.print("✓ Python template tests passed\n\n", .{});
         return;
     };
-    allocator.free(python_check.stdout);
-    allocator.free(python_check.stderr);
+    allocator.free(uv_check.stdout);
+    allocator.free(uv_check.stderr);
 
-    // Verify Flask dependency installed
-    const flask_check = std.process.Child.run(.{
-        .allocator = allocator,
-        .argv = &[_][]const u8{ "python3", "-c", "import flask" },
-    }) catch {
-        std.debug.print("⚠️  Flask not installed, skipping Python tests\n", .{});
-        std.debug.print("   Install with: pip install flask\n\n", .{});
-        return;
-    };
-    allocator.free(flask_check.stdout);
-    allocator.free(flask_check.stderr);
-
-    var server = try startServer(allocator, &[_][]const u8{ "./venv/bin/python3", "examples/python_server.py" }, 8080, "Python");
+    // Use uv to run the template
+    var server = try startServer(allocator, &[_][]const u8{ "uv", "run", "templates/quickstart-python.py" }, 8080, "Python Template (uv)");
     defer stopServer(&server);
 
-    try runServerTests(allocator, "Python");
-    std.debug.print("✓ Python server tests passed\n\n", .{});
+    try runTemplateTests(allocator, "Python Template");
+    std.debug.print("✓ Python template tests passed\n\n", .{});
 }
 
-test "Node.js server integration" {
+test "TypeScript template server" {
     const allocator = testing.allocator;
 
     // Skip in CI environment
@@ -156,38 +172,32 @@ test "Node.js server integration" {
         return;
     }
 
-    try testNodeServer(allocator);
+    try testTypeScriptTemplate(allocator);
 }
 
-fn testNodeServer(allocator: std.mem.Allocator) !void {
-    std.debug.print("📦 Testing Node.js server...\n", .{});
+fn testTypeScriptTemplate(allocator: std.mem.Allocator) !void {
+    std.debug.print("📦 Testing TypeScript template server...\n", .{});
 
-    // Check if Node is available
-    const node_check = std.process.Child.run(.{
+    // Check if Bun is available
+    const bun_check = std.process.Child.run(.{
         .allocator = allocator,
-        .argv = &[_][]const u8{ "node", "--version" },
+        .argv = &[_][]const u8{ "bun", "--version" },
     }) catch {
-        std.debug.print("⚠️  Node.js not available, skipping Node tests\n\n", .{});
+        std.debug.print("⚠️  Bun not available, skipping TypeScript template tests\n", .{});
+        std.debug.print("   Install from: https://bun.sh\n\n", .{});
         return;
     };
-    allocator.free(node_check.stdout);
-    allocator.free(node_check.stderr);
+    allocator.free(bun_check.stdout);
+    allocator.free(bun_check.stderr);
 
-    // Check if dependencies are installed
-    std.fs.cwd().access("examples/node_modules", .{}) catch {
-        std.debug.print("⚠️  Node dependencies not installed\n", .{});
-        std.debug.print("   Install with: cd examples && npm install\n\n", .{});
-        return;
-    };
-
-    var server = try startServer(allocator, &[_][]const u8{ "node", "examples/node_server.js" }, 8080, "Node.js");
+    var server = try startServer(allocator, &[_][]const u8{ "bun", "run", "templates/quickstart-typescript.ts" }, 8080, "TypeScript Template");
     defer stopServer(&server);
 
-    try runServerTests(allocator, "Node.js");
-    std.debug.print("✓ Node.js server tests passed\n\n", .{});
+    try runTemplateTests(allocator, "TypeScript Template");
+    std.debug.print("✓ TypeScript template tests passed\n\n", .{});
 }
 
-test "Go server integration" {
+test "Go template server" {
     const allocator = testing.allocator;
 
     // Skip in CI environment
@@ -197,28 +207,104 @@ test "Go server integration" {
         return;
     }
 
-    try testGoServer(allocator);
+    try testGoTemplate(allocator);
 }
 
-fn testGoServer(allocator: std.mem.Allocator) !void {
-    std.debug.print("🐹 Testing Go server...\n", .{});
+fn testGoTemplate(allocator: std.mem.Allocator) !void {
+    std.debug.print("🐹 Testing Go template server...\n", .{});
 
     // Check if Go is available
     const go_check = std.process.Child.run(.{
         .allocator = allocator,
         .argv = &[_][]const u8{ "go", "version" },
     }) catch {
-        std.debug.print("⚠️  Go not available, skipping Go tests\n\n", .{});
+        std.debug.print("⚠️  Go not available, skipping Go template tests\n\n", .{});
         return;
     };
     allocator.free(go_check.stdout);
     allocator.free(go_check.stderr);
 
-    var server = try startServer(allocator, &[_][]const u8{ "go", "run", "examples/go_server.go" }, 8080, "Go");
+    var server = try startServer(allocator, &[_][]const u8{ "go", "run", "templates/quickstart-go.go" }, 8080, "Go Template");
     defer stopServer(&server);
 
-    try runServerTests(allocator, "Go");
-    std.debug.print("✓ Go server tests passed\n\n", .{});
+    try runTemplateTests(allocator, "Go Template");
+    std.debug.print("✓ Go template tests passed\n\n", .{});
+}
+
+fn runTemplateTests(allocator: std.mem.Allocator, template_type: []const u8) !void {
+    // Test 1: Basic PreToolUse event handling
+    {
+        std.debug.print("  Testing PreToolUse event... ", .{});
+        const input =
+            \\{"session_id":"test123","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo hello"}}
+        ;
+
+        const result = try runDispatcher(allocator, input);
+        defer allocator.free(result.stdout);
+        defer allocator.free(result.stderr);
+
+        // Templates should allow by default (no decision field)
+        try testing.expectEqual(@as(u8, 0), result.term.Exited);
+        std.debug.print("✓\n", .{});
+    }
+
+    // Test 2: UserPromptSubmit event with new fields
+    {
+        std.debug.print("  Testing UserPromptSubmit event... ", .{});
+        const input =
+            \\{"session_id":"test123","hook_event_name":"UserPromptSubmit","prompt":"Hello Claude","current_working_directory":"/home/user/project"}
+        ;
+
+        const result = try runDispatcher(allocator, input);
+        defer allocator.free(result.stdout);
+        defer allocator.free(result.stderr);
+
+        try testing.expectEqual(@as(u8, 0), result.term.Exited);
+        std.debug.print("✓\n", .{});
+    }
+
+    // Test 3: PostToolUse event
+    {
+        std.debug.print("  Testing PostToolUse event... ", .{});
+        const input =
+            \\{"session_id":"test123","hook_event_name":"PostToolUse","tool_name":"Read","tool_input":{"file_path":"test.txt"},"tool_response":{"content":"file contents"}}
+        ;
+
+        const result = try runDispatcher(allocator, input);
+        defer allocator.free(result.stdout);
+        defer allocator.free(result.stderr);
+
+        try testing.expectEqual(@as(u8, 0), result.term.Exited);
+        std.debug.print("✓\n", .{});
+    }
+
+    // Test 4: Other event types
+    {
+        std.debug.print("  Testing other events... ", .{});
+
+        const events = [_][]const u8{
+            \\{"session_id":"test123","hook_event_name":"Notification","message":"Test notification","title":"Test"}
+            ,
+            \\{"session_id":"test123","hook_event_name":"Stop","stop_hook_active":true}
+            ,
+            \\{"session_id":"test123","hook_event_name":"SubagentStop","stop_hook_active":false}
+            ,
+            \\{"session_id":"test123","hook_event_name":"PreCompact","trigger":"manual","custom_instructions":"compact now"}
+            ,
+        };
+
+        for (events) |event| {
+            const result = try runDispatcher(allocator, event);
+            defer allocator.free(result.stdout);
+            defer allocator.free(result.stderr);
+
+            try testing.expectEqual(@as(u8, 0), result.term.Exited);
+        }
+
+        std.debug.print("✓\n", .{});
+    }
+
+    _ = template_type;
 }
 
 fn runServerTests(allocator: std.mem.Allocator, server_type: []const u8) !void {

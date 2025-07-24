@@ -84,7 +84,7 @@ Scripts create `~/.claude/settings.json` with defaults. Edit for your servers:
         "hooks": [
           {
             "type": "command",
-            "command": "ccdh"
+            "command": "cchd"
           }
         ]
       }
@@ -115,7 +115,7 @@ Scripts create `~/.claude/settings.json` with defaults. Edit for your servers:
         "hooks": [
           {
             "type": "command",
-            "command": "ccdh"
+            "command": "cchd"
           }
         ]
       }
@@ -146,7 +146,7 @@ Scripts create `~/.claude/settings.json` with defaults. Edit for your servers:
         "hooks": [
           {
             "type": "command",
-            "command": "ccdh"
+            "command": "cchd"
           }
         ]
       }
@@ -166,7 +166,7 @@ Per-hook options:
         "hooks": [
           {
             "type": "command",
-            "command": "ccdh"
+            "command": "cchd"
           }
         ]
       }
@@ -243,47 +243,7 @@ These templates provide:
 - Basic logging of event data
 - Comments showing where to add your custom logic
 
-## Example Servers
 
-In `examples/`: Battle-tested production examples with full security features.
-
-### Python (Flask)
-
-```bash
-cd examples
-pip install -r requirements.txt
-python3 python_server.py
-```
-
-- Blocks dangerous cmds, protects files, modifies paths.
-
-### Node.js (Express)
-
-```bash
-cd examples
-npm install
-node node_server.js
-```
-
-- Rate limits, audits, security headers.
-
-### Go
-
-```bash
-cd examples
-go run go_server.go
-```
-
-- Stats, SQL injection/path traversal detection.
-
-### Shell
-
-```bash
-cd examples
-./simple_server.sh
-```
-
-- Basic allow/block.
 
 ## Testing
 
@@ -300,7 +260,7 @@ Covers: Builds, fail modes, servers, responses, codes.
 - `src/`: Core.
   - `cchd.c`: Dispatcher.
   - `PROTOCOL.md`: Spec.
-- `examples/`: Servers.
+- `templates/`: Quick start templates.
 - `build.zig`: Config.
 - `test.zig`: Suite.
 - `install`: Universal install script.
