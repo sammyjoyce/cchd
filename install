@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Claude Hooks Dispatcher (cchd) - Universal Installer
+# Usage: curl -fsSL https://raw.githubusercontent.com/sammyjoyce/cchd/main/install | bash
+
+set -euo pipefail
+
+os=$(uname -s | tr '[:upper:]' '[:lower:]')
+
+case "$os" in
+    darwin)
+        # Download and run the macOS installer
+        curl -fsSL https://raw.githubusercontent.com/sammyjoyce/cchd/main/install-macos.sh | bash
+        ;;
+    linux)
+        # Download and run the Linux installer
+        curl -fsSL https://raw.githubusercontent.com/sammyjoyce/cchd/main/install-linux.sh | bash
+        ;;
+    mingw*|msys*|cygwin*)
+        # Windows
+        echo "Please use the PowerShell installer:"
+        echo "iwr -useb https://raw.githubusercontent.com/sammyjoyce/cchd/main/install-windows.ps1 | iex"
+        exit 1
+        ;;
+    *)
+        echo "Unsupported operating system: $os"
+        exit 1
+        ;;
+esac

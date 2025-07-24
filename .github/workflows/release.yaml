@@ -128,6 +128,7 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
+          draft: false
           files: release/*
           body: |
             ## Installation

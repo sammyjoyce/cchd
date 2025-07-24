@@ -1,189 +1,160 @@
-#!/bin/bash
-# Claude Hooks Dispatcher (cchd) - macOS Installation Script
-# Copyright (c) 2025 Sam Joyce. MIT License.
-
-# This script installs the cchd binary on macOS by downloading the latest release from GitHub,
-# verifying it if possible, installing to /usr/local/bin, and setting up basic configuration.
-
+#!/usr/bin/env bash
 set -euo pipefail
 
-readonly COLOR_RED='\033[0;31m'
-readonly COLOR_GREEN='\033[0;32m'
-readonly COLOR_YELLOW='\033[1;33m'
-readonly COLOR_NONE='\033[0m'
+APP=cchd
+REPO=sammyjoyce/cchd
 
-readonly INSTALL_DIRECTORY="/usr/local/bin"
-readonly CLAUDE_CONFIGURATION_DIRECTORY="$HOME/.claude"
-readonly RELEASE_API_URL="https://api.github.com/repos/sammyjoyce/cchd/releases/latest"
-readonly PLATFORM="macos"
-readonly DOWNLOAD_FILE_EXTENSION=".tar.gz"
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+ORANGE='\033[38;2;255;140;0m'
+NC='\033[0m' # No Color
 
-# We limit supported architectures to x86_64 and arm64 to match common macOS hardware.
-# This function asserts the architecture is supported before proceeding.
-detect_architecture() {
-    local machine_arch
-    machine_arch=$(uname -m)
+requested_version=${VERSION:-}
 
-    if [ "$machine_arch" = "x86_64" ]; then
-        echo "x86_64"
-        return 0
-    fi
+# Detect OS and architecture
+os=$(uname -s | tr '[:upper:]' '[:lower:]')
+if [[ "$os" == "darwin" ]]; then
+    os="macos"
+fi
 
-    if [ "$machine_arch" = "arm64" ]; then
-        echo "aarch64"
-        return 0
-    fi
+arch=$(uname -m)
+if [[ "$arch" == "arm64" ]]; then
+    arch="aarch64"
+elif [[ "$arch" == "x86_64" ]]; then
+    arch="x86_64"
+fi
 
-    echo -e "${COLOR_RED}❌ Unsupported architecture: $machine_arch${COLOR_NONE}" >&2
-    exit 1
-}
+# Construct filename based on the release naming convention
+filename="$APP-$arch-$os-none.tar.gz"
 
-# We assert Homebrew is installed first since it's used to install curl if needed.
-# This ensures the script fails early if the environment isn't suitable.
-check_prerequisites() {
-    if ! command -v brew > /dev/null 2>&1; then
-        echo -e "${COLOR_RED}❌ Homebrew not found${COLOR_NONE}"
-        echo "Please install Homebrew first: https://brew.sh"
+# Validate platform support
+case "$filename" in
+    *"-macos-"*)
+        [[ "$arch" == "x86_64" || "$arch" == "aarch64" ]] || {
+            echo -e "${RED}Unsupported architecture: $arch${NC}"
+            exit 1
+        }
+    ;;
+    *)
+        echo -e "${RED}This installer is for macOS only${NC}"
+        exit 1
+    ;;
+esac
+
+INSTALL_DIR=$HOME/.cchd/bin
+mkdir -p "$INSTALL_DIR"
+
+# Determine download URL
+if [ -z "$requested_version" ]; then
+    url="https://github.com/$REPO/releases/latest/download/$filename"
+    specific_version=$(curl -s https://api.github.com/repos/$REPO/releases/latest | grep '"tag_name"' | cut -d '"' -f 4 | sed 's/^v//')
+    
+    if [[ $? -ne 0 || -z "$specific_version" ]]; then
+        echo -e "${RED}Failed to fetch version information${NC}"
         exit 1
     fi
+else
+    url="https://github.com/$REPO/releases/download/v${requested_version}/$filename"
+    specific_version=$requested_version
+fi
 
-    if ! command -v curl > /dev/null 2>&1; then
-        echo -e "${COLOR_YELLOW}⚠️  Installing curl...${COLOR_NONE}"
-        brew install curl
+print_message() {
+    local level=$1
+    local message=$2
+    local color=""
+    
+    case $level in
+        info) color="${GREEN}" ;;
+        warning) color="${YELLOW}" ;;
+        error) color="${RED}" ;;
+    esac
+    
+    echo -e "${color}${message}${NC}"
+}
+
+check_version() {
+    if command -v cchd >/dev/null 2>&1; then
+        cchd_path=$(which cchd)
+        
+        # Get installed version
+        installed_version=$(cchd --version 2>/dev/null | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1 || echo "unknown")
+        
+        if [[ "$installed_version" == "$specific_version" ]]; then
+            print_message info "Version ${YELLOW}$specific_version${GREEN} already installed"
+            exit 0
+        elif [[ "$installed_version" != "unknown" ]]; then
+            print_message info "Installed version: ${YELLOW}$installed_version${GREEN}, upgrading to ${YELLOW}$specific_version"
+        fi
     fi
 }
 
-# We use curl with --fail to assert successful HTTP response and limit output to silent mode.
-fetch_release_information() {
-    curl --silent --fail "$RELEASE_API_URL"
-}
-
-# We use grep to find the exact matching URL pattern for our platform to avoid incorrect downloads.
-# Assert that a URL is found, or display available assets for debugging.
-extract_download_url() {
-    local release_information="$1"
-    local platform_arch="$2"
-
-    local download_url
-    download_url=$(echo "$release_information" | grep -o "https://[^\"]*cchd-${platform_arch}-${PLATFORM}-none${DOWNLOAD_FILE_EXTENSION}" | head -n 1)
-
-    if [ -z "$download_url" ]; then
-        echo -e "${COLOR_RED}❌ No release found for ${platform_arch}-${PLATFORM}${COLOR_NONE}" >&2
-        echo "Available releases:" >&2
-        echo "$release_information" | grep -o "cchd-[^\"]*${DOWNLOAD_FILE_EXTENSION}" | sort -u >&2
-        exit 1
-    fi
-
-    echo "$download_url"
-}
-
-# Extract the version tag from the release information.
-# This provides feedback on what version is being installed.
-extract_version() {
-    local release_information="$1"
-    echo "$release_information" | grep -o '"tag_name": "[^"]*"' | cut -d '"' -f 4
-}
-
-# We use curl with -L to follow redirects and assert success.
-download_binary_archive() {
-    local download_url="$1"
-    local temp_directory="$2"
-
-    local archive_path="${temp_directory}/cchd${DOWNLOAD_FILE_EXTENSION}"
-    curl --location --fail "$download_url" --output "$archive_path"
-    echo "$archive_path"
-}
-
-# Attempt signature verification if minisign is available.
-# This is optional but improves safety by verifying integrity when possible.
-# We download the signature and public key only if needed.
-verify_signature_if_possible() {
-    local release_information="$1"
-    local archive_path="$2"
-    local temp_directory="$3"
-
-    if ! command -v minisign > /dev/null 2>&1; then
-        echo -e "${COLOR_YELLOW}⚠️  Skipping signature verification (minisign not available)${COLOR_NONE}"
-        echo "To enable verification: brew install minisign"
+verify_signature() {
+    local archive_path=$1
+    local temp_dir=$2
+    
+    if ! command -v minisign >/dev/null 2>&1; then
+        print_message warning "Skipping signature verification (minisign not installed)"
+        print_message info "To enable verification: ${YELLOW}brew install minisign"
         return 0
     fi
-
-    local minisig_url="${archive_path}.minisig"
-    minisig_url=$(echo "$archive_path" | sed 's|$|.minisig|')  # Avoid variable issues
-    local pubkey_url
-    pubkey_url=$(echo "$release_information" | grep -o "https://[^\"]*minisign\.pub" | head -n 1)
-
-    if [ -z "$minisig_url" ] || [ -z "$pubkey_url" ]; then
-        echo -e "${COLOR_YELLOW}⚠️  No signature available for verification${COLOR_NONE}"
-        return 0
-    fi
-
-    echo "Downloading signature..."
-    curl --location --fail "$minisig_url" --output "${archive_path}.minisig"
-
-    echo "Downloading public key..."
-    curl --location --fail "$pubkey_url" --output "${temp_directory}/minisign.pub"
-
-    echo "Verifying signature..."
-    if minisign -V -p "${temp_directory}/minisign.pub" -m "$archive_path"; then
-        echo -e "${COLOR_GREEN}✓${COLOR_NONE} Signature verified"
+    
+    # Download signature and public key
+    local sig_url="${url}.minisig"
+    local pubkey_url="https://github.com/$REPO/releases/latest/download/minisign.pub"
+    
+    print_message info "Downloading signature..."
+    if curl -sL -o "${archive_path}.minisig" "$sig_url" 2>/dev/null; then
+        if curl -sL -o "${temp_dir}/minisign.pub" "$pubkey_url" 2>/dev/null; then
+            print_message info "Verifying signature..."
+            if minisign -V -p "${temp_dir}/minisign.pub" -m "$archive_path" >/dev/null 2>&1; then
+                print_message info "✓ Signature verified"
+            else
+                print_message warning "Signature verification failed"
+            fi
+        else
+            print_message warning "Could not download public key"
+        fi
     else
-        echo -e "${COLOR_RED}❌ Signature verification failed!${COLOR_NONE}" >&2
-        exit 1
+        print_message warning "No signature available for this release"
     fi
 }
 
-# Extract the binary from the archive.
-# We assert the extraction succeeds and limit to the temp directory.
-extract_binary() {
-    local archive_path="$1"
-    local temp_directory="$2"
-
-    echo "Extracting cchd..."
-    tar -xzf "$archive_path" -C "$temp_directory"
+download_and_install() {
+    print_message info "Downloading ${ORANGE}$APP ${GREEN}version ${YELLOW}$specific_version${GREEN}..."
+    
+    # Create temporary directory
+    temp_dir=$(mktemp -d)
+    trap 'rm -rf "$temp_dir"' EXIT
+    
+    cd "$temp_dir"
+    
+    # Download with progress bar
+    curl -# -L -o "$filename" "$url"
+    
+    # Verify signature if possible
+    verify_signature "$filename" "$temp_dir"
+    
+    # Extract and install
+    tar -xzf "$filename"
+    mv cchd "$INSTALL_DIR/"
+    chmod +x "$INSTALL_DIR/cchd"
+    
+    cd - >/dev/null
 }
 
-# Install the binary to the installation directory.
-# We check write permissions to decide if sudo is needed, improving UX on different setups.
-install_binary() {
-    local temp_directory="$1"
-
-    echo
-    echo "📦 Installing cchd to $INSTALL_DIRECTORY..."
-    local binary_path="${temp_directory}/cchd"
-
-    if [ -w "$INSTALL_DIRECTORY" ]; then
-        cp "$binary_path" "$INSTALL_DIRECTORY/"
-    else
-        sudo cp "$binary_path" "$INSTALL_DIRECTORY/"
+setup_claude_config() {
+    local claude_dir="$HOME/.claude"
+    local config_file="$claude_dir/settings.json"
+    
+    if [[ ! -d "$claude_dir" ]]; then
+        print_message info "Creating Claude configuration directory..."
+        mkdir -p "$claude_dir"
     fi
-
-    chmod +x "${INSTALL_DIRECTORY}/cchd"
-}
-
-# Verify the installation by checking if cchd is in PATH and running --version.
-# This asserts the binary works post-install.
-verify_installation() {
-    if command -v cchd > /dev/null 2>&1; then
-        echo -e "${COLOR_GREEN}✓${COLOR_NONE} cchd installed successfully"
-        cchd --version || true
-    else
-        echo -e "${COLOR_YELLOW}⚠️  cchd installed but not in PATH${COLOR_NONE}"
-        echo "Add $INSTALL_DIRECTORY to your PATH if needed"
-    fi
-}
-
-# Set up the Claude configuration directory and example settings file.
-# We create only if not exists to avoid overwriting user configurations.
-setup_configuration() {
-    echo
-    echo "📁 Setting up Claude configuration..."
-    mkdir -p "$CLAUDE_CONFIGURATION_DIRECTORY"
-
-    local hook_config_path="${CLAUDE_CONFIGURATION_DIRECTORY}/settings.json"
-    if [ ! -f "$hook_config_path" ]; then
-        echo "Creating example hook configuration..."
-        cat > "$hook_config_path" << 'EOF'
+    
+    if [[ ! -f "$config_file" ]]; then
+        print_message info "Creating example hook configuration..."
+        cat > "$config_file" << 'EOF'
 {
   "hooks": {
     "PreToolUse": [
@@ -221,67 +192,92 @@ setup_configuration() {
   }
 }
 EOF
-        echo -e "${COLOR_GREEN}✓${COLOR_NONE} Created $hook_config_path"
+        print_message info "Created $config_file"
     else
-        echo -e "${COLOR_YELLOW}ℹ️${COLOR_NONE} Hook configuration already exists at $hook_config_path"
+        print_message info "Claude configuration already exists at $config_file"
     fi
 }
 
-# Test the installed cchd with sample input.
-# This checks basic functionality, expecting possible failure if no server is running.
-test_cchd() {
-    echo
-    echo "🧪 Testing cchd..."
-    local test_input='{"session_id":"test123","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ls"}}'
-    echo "$test_input" | cchd 2>&1 || echo -e "${COLOR_YELLOW}ℹ️${COLOR_NONE} Test failed (this is expected if no server is running)"
+add_to_path() {
+    local config_file=$1
+    local command=$2
+    
+    if grep -Fxq "$command" "$config_file" 2>/dev/null; then
+        print_message info "Command already exists in $config_file"
+    elif [[ -w $config_file ]]; then
+        echo -e "\n# cchd - Claude Hooks Dispatcher" >> "$config_file"
+        echo "$command" >> "$config_file"
+        print_message info "Added ${ORANGE}$APP ${GREEN}to \$PATH in $config_file"
+    else
+        print_message warning "Manually add the directory to $config_file:"
+        print_message info "  $command"
+    fi
 }
 
-# Main installation flow
-# We create a temp directory early and set a trap to clean it on exit for safety.
-echo "🚀 Installing Claude Hooks Dispatcher (cchd) for macOS"
-echo "=================================================="
+# Main execution
+print_message info "Installing Claude Hooks Dispatcher (cchd) for macOS"
 echo
 
-check_prerequisites
+check_version
+download_and_install
+setup_claude_config
 
-platform_arch=$(detect_architecture)
-echo "Detected architecture: ${platform_arch}-${PLATFORM}"
+# Configure PATH
+XDG_CONFIG_HOME=${XDG_CONFIG_HOME:-$HOME/.config}
 
-temp_directory=$(mktemp -d)
-trap 'rm -rf "$temp_directory"' EXIT
+current_shell=$(basename "$SHELL")
+case $current_shell in
+    fish)
+        config_files="$HOME/.config/fish/config.fish"
+    ;;
+    zsh)
+        config_files="$HOME/.zshrc $HOME/.zshenv $XDG_CONFIG_HOME/zsh/.zshrc $XDG_CONFIG_HOME/zsh/.zshenv"
+    ;;
+    bash)
+        config_files="$HOME/.bashrc $HOME/.bash_profile $HOME/.profile $XDG_CONFIG_HOME/bash/.bashrc $XDG_CONFIG_HOME/bash/.bash_profile"
+    ;;
+    *)
+        config_files="$HOME/.bashrc $HOME/.bash_profile"
+    ;;
+esac
+
+config_file=""
+for file in $config_files; do
+    if [[ -f $file ]]; then
+        config_file=$file
+        break
+    fi
+done
+
+if [[ -z $config_file ]]; then
+    print_message error "No shell config file found. Checked: $config_files"
+    exit 1
+fi
+
+if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+    case $current_shell in
+        fish)
+            add_to_path "$config_file" "fish_add_path $INSTALL_DIR"
+        ;;
+        *)
+            add_to_path "$config_file" "export PATH=$INSTALL_DIR:\$PATH"
+        ;;
+    esac
+fi
+
+# GitHub Actions support
+if [ -n "${GITHUB_ACTIONS-}" ] && [ "${GITHUB_ACTIONS}" == "true" ]; then
+    echo "$INSTALL_DIR" >> $GITHUB_PATH
+    print_message info "Added $INSTALL_DIR to \$GITHUB_PATH"
+fi
 
 echo
-echo "📥 Downloading cchd..."
-echo "Fetching latest release information..."
-
-release_information=$(fetch_release_information)
-
-download_url=$(extract_download_url "$release_information" "$platform_arch")
-
-version=$(extract_version "$release_information")
-echo "Latest version: $version"
-
-echo "Downloading from: $download_url"
-archive_path=$(download_binary_archive "$download_url" "$temp_directory")
-
-verify_signature_if_possible "$release_information" "$archive_path" "$temp_directory"
-
-extract_binary "$archive_path" "$temp_directory"
-
-install_binary "$temp_directory"
-
-verify_installation
-
-setup_configuration
-
-test_cchd
-
+print_message info "✨ Installation complete!"
 echo
-echo "✨ Installation complete!"
+print_message info "Next steps:"
+print_message info "1. Reload your shell: ${YELLOW}source $config_file"
+print_message info "2. Verify installation: ${YELLOW}cchd --version"
+print_message info "3. Start your hook server (see examples at https://github.com/$REPO/tree/main/examples)"
+print_message info "4. Claude Desktop will automatically trigger hooks"
 echo
-echo "Next steps:"
-echo "1. Start your hook server (see examples at https://github.com/sammyjoyce/cchd/tree/main/examples)"
-echo "2. Configure hooks in ${CLAUDE_CONFIGURATION_DIRECTORY}/settings.json"
-echo "3. Use Claude Desktop - hooks will be automatically triggered"
-echo
-echo "For more information: https://github.com/sammyjoyce/cchd"
+print_message info "For more information: https://github.com/$REPO"
