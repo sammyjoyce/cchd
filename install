@@ -18,15 +18,15 @@ arch=$(uname -m)
 # Map OS and architecture to match release file naming
 if [[ "$os" == "darwin" ]]; then
   if [[ "$arch" == "arm64" || "$arch" == "aarch64" ]]; then
-    filename="$APP-aarch64-apple-darwin.tar.gz"
+    filename="$APP-darwin-arm64.tar.gz"
   elif [[ "$arch" == "x86_64" ]]; then
-    filename="$APP-x86_64-apple-darwin.tar.gz"
+    filename="$APP-darwin-x64.tar.gz"
   fi
 elif [[ "$os" == "linux" ]]; then
   if [[ "$arch" == "aarch64" ]]; then
-    filename="$APP-aarch64-linux-gnu.tar.gz"
+    filename="$APP-linux-arm64.tar.gz"
   elif [[ "$arch" == "x86_64" ]]; then
-    filename="$APP-x86_64-linux-gnu.tar.gz"
+    filename="$APP-linux-x64.tar.gz"
   fi
 else
   echo "${RED}Unsupported OS: $os${NC}"
@@ -86,16 +86,15 @@ download_and_install() {
     mkdir -p cchdtmp && cd cchdtmp
     curl -# -L $url | tar xz
     
-    # Find the extracted binary (it will have a platform-specific name)
-    binary=$(find . -name "cchd-*" -type f | head -1)
-    if [[ -z "$binary" ]]; then
+    # The archive contains just 'cchd'
+    if [[ ! -f "cchd" ]]; then
         print_message error "Failed to find cchd binary in archive"
         exit 1
     fi
     
-    # Move and rename to just 'cchd'
-    chmod +x "$binary"
-    mv "$binary" "$INSTALL_DIR/cchd"
+    # Move to install directory
+    chmod +x cchd
+    mv cchd "$INSTALL_DIR/cchd"
     cd .. && rm -rf cchdtmp
 }
 
