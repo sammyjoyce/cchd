@@ -66,7 +66,8 @@ All requests are sent as HTTP POST to the server endpoint with JSON body:
 #### Notification
 ```json
 {
-  "message": "Notification message"
+  "message": "Notification message",
+  "title": "Notification title"
 }
 ```
 
@@ -90,22 +91,64 @@ All requests are sent as HTTP POST to the server endpoint with JSON body:
 ```json
 {
   "version": "1.0",
-  "decision": "allow|block|modify",
+  "decision": "approve|block|modify",  // Optional, hook-specific
   "reason": "Optional human-readable reason",
   "modified_data": {
     // Optional: Modified event data (only for decision: "modify")
   },
   "metadata": {
     // Optional: Server-specific metadata
+  },
+  // BaseResponse fields (all optional):
+  "continue": true,              // Whether Claude should continue (default: true)
+  "stopReason": "string",        // Message shown when continue is false
+  "suppressOutput": false,       // Suppress stdout output entirely (default: false)
+  
+  // Modern PreToolUse format (preferred over decision/reason):
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "permissionDecision": "allow|deny|ask",  // Modern permission control
+    "permissionDecisionReason": "Reason shown to user or Claude"
   }
+}
+```
+
+#### Alternative Legacy Response Format
+
+For backward compatibility, the following format is also supported:
+
+```json
+{
+  "action": "continue|block",
+  "stopReason": "Optional reason for blocking"
 }
 ```
 
 ### Decision Types
 
-- **allow**: Event proceeds normally
-- **block**: Event is blocked with reason sent to Claude
+The `decision` field is optional and hook-specific:
+
+- **approve**: (Deprecated) Approve the event - PreToolUse only
+- **block**: Block the event with reason sent to Claude
 - **modify**: Event proceeds with modified data
+
+If no `decision` is specified, the event proceeds normally.
+
+#### Hook-Specific Decision Rules
+
+Servers should follow these rules based on the hook type:
+
+- **PreToolUse**: 
+  - Deprecated: `decision: "approve"` or `"block"`
+  - Modern: Use `hookSpecificOutput.permissionDecision: "allow"|"deny"|"ask"`
+  - Also supports `decision: "modify"` with `modified_data`
+- **PostToolUse**: Can use `decision: "block"` or no decision
+- **Stop/SubagentStop**: Can use `decision: "block"` (should include `reason`)
+- **Notification**: Should not include a decision field
+- **UserPromptSubmit**: Can use `decision: "block"` or no decision
+- **PreCompact**: Should not include a decision field
+
+The dispatcher passes through server responses as-is. Claude handles invalid decisions gracefully.
 
 ### HTTP Status Codes
 

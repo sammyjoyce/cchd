@@ -2,30 +2,32 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "",
         "hooks": [
           {
             "type": "command",
-            "command": "/path/to/cchd --server http://localhost:8080/hook"
-          }
-        ]
-      },
-      {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/path/to/cchd --server http://localhost:8080/hook --fail-closed"
+            "command": "ccdh"
           }
         ]
       }
     ],
     "PostToolUse": [
       {
+        "matcher": "",
         "hooks": [
           {
             "type": "command",
-            "command": "/path/to/cchd --server http://localhost:8080/hook --timeout 10000"
+            "command": "cchd"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cchd"
           }
         ]
       }
@@ -35,7 +37,38 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/path/to/cchd --server http://localhost:8080/hook"
+            "command": "ccdh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cchd"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cchd"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ccdh"
           }
         ]
       }

@@ -16,62 +16,50 @@ Claude Hooks Dispatcher (cchd) is a simple, fast dispatcher that transforms Clau
 
 ## Installation
 
-### Quick Install via Script
+### Quick Install (Recommended)
 
-Scripts handle deps (Zig, brew/apt), download signed releases, verify, install to `/usr/local/bin`, and setup `~/.claude/settings.json`.
-
-#### macOS
+One-liner that auto-detects your OS and installs the latest release:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/sammyjoyce/cchd/main/install-macos.sh | bash
+curl -sSL https://raw.githubusercontent.com/sammyjoyce/cchd/main/install | bash
 ```
 
-Clone and run:
-
-```bash
-git clone https://github.com/sammyjoyce/cchd.git
-cd cchd
-./install-macos.sh
-```
-
-#### Linux
-
-```bash
-curl -sSL https://raw.githubusercontent.com/sammyjoyce/cchd/main/install-linux.sh | bash
-```
-
-Clone and run:
-
-```bash
-git clone https://github.com/sammyjoyce/cchd.git
-cd cchd
-./install-linux.sh
-```
+This will:
+- Download the latest signed release
+- Verify signature (if minisign is available)
+- Install to `~/.cchd/bin`
+- Configure your shell PATH
+- Setup `~/.claude/settings.json`
 
 ### Manual Build from Source
 
-- Zig 0.14.1+ (install via brew or https://ziglang.org/download/).
-- C compiler for yyjson.
-- libcurl dev headers.
+Requirements:
+- Zig 0.14.1+ (install via brew or https://ziglang.org/download/)
+- C compiler for yyjson
+- libcurl dev headers
 
 ```bash
+git clone https://github.com/sammyjoyce/cchd.git
+cd cchd
 zig build -Doptimize=ReleaseSafe
 sudo cp zig-out/bin/cchd /usr/local/bin/
 ```
 
-### Verify
+### Verify Installation
 
-Assert it's in PATH:
+Check it's in PATH:
 
 ```bash
-which cchd
+cchd --version
 ```
 
-Test flow:
+Test the dispatcher:
 
 ```bash
 echo '{"session_id":"test123","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ls"}}' | cchd
 ```
+
+Note: This will fail with "Failed to parse input JSON" if no server is running, which is expected.
 
 ## How It Works
 
@@ -96,7 +84,7 @@ Scripts create `~/.claude/settings.json` with defaults. Edit for your servers:
         "hooks": [
           {
             "type": "command",
-            "command": "cchd --server http://localhost:8080/hook"
+            "command": "ccdh"
           }
         ]
       }
@@ -107,7 +95,17 @@ Scripts create `~/.claude/settings.json` with defaults. Edit for your servers:
         "hooks": [
           {
             "type": "command",
-            "command": "cchd --server http://localhost:8080/hook"
+            "command": "cchd"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cchd"
           }
         ]
       }
@@ -117,7 +115,38 @@ Scripts create `~/.claude/settings.json` with defaults. Edit for your servers:
         "hooks": [
           {
             "type": "command",
-            "command": "cchd --server http://localhost:8080/hook"
+            "command": "ccdh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cchd"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cchd"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ccdh"
           }
         ]
       }
@@ -137,7 +166,7 @@ Per-hook options:
         "hooks": [
           {
             "type": "command",
-            "command": "cchd --server http://localhost:8080/hook"
+            "command": "ccdh"
           }
         ]
       }
@@ -169,9 +198,54 @@ Env: `HOOK_SERVER_URL` overrides default.
 
 Detailed in [src/PROTOCOL.md](src/PROTOCOL.md): Versioned JSON, event metadata, data. Why? Compatibility, extensibility.
 
+## Quick Start Templates
+
+In `templates/`: Minimal templates with placeholder functions for each hook event type.
+
+### Install and Run a Template
+
+Choose your preferred language:
+
+#### Python
+```bash
+# Copy template to your project
+curl -sSL https://raw.githubusercontent.com/sammyjoyce/cchd/main/templates/quickstart-python.py -o hook-server.py
+
+# Run with uv (installs dependencies automatically)
+uv run hook-server.py
+
+# Or with pip
+pip install flask
+python hook-server.py
+```
+
+#### TypeScript
+```bash
+# Copy template to your project
+curl -sSL https://raw.githubusercontent.com/sammyjoyce/cchd/main/templates/quickstart-typescript.ts -o hook-server.ts
+
+# Run with Bun
+bun run hook-server.ts
+```
+
+#### Go
+```bash
+# Copy template to your project
+curl -sSL https://raw.githubusercontent.com/sammyjoyce/cchd/main/templates/quickstart-go.go -o hook-server.go
+
+# Run directly
+go run hook-server.go
+```
+
+These templates provide:
+- Separate handler functions for each event type (PreToolUse, PostToolUse, etc.)
+- Type definitions for request/response structures
+- Basic logging of event data
+- Comments showing where to add your custom logic
+
 ## Example Servers
 
-In `examples/`: Battle-tested, with safety features.
+In `examples/`: Battle-tested production examples with full security features.
 
 ### Python (Flask)
 
@@ -229,7 +303,7 @@ Covers: Builds, fail modes, servers, responses, codes.
 - `examples/`: Servers.
 - `build.zig`: Config.
 - `test.zig`: Suite.
-- `install-*.sh`: Scripts.
+- `install`: Universal install script.
 
 ## Requirements
 

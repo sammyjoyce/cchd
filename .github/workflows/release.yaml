@@ -2,7 +2,11 @@ name: Release
 
 on:
   push:
-    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -10,148 +14,171 @@ jobs:
       matrix:
         include:
           - os: namespace-profile-default
-            name: linux
+            name: linux-amd64
+            targets: "x86_64-linux-gnu"
           - os: namespace-profile-macos-arm64
-            name: macos
+            name: macos-arm64
+            targets: "aarch64-macos"
     
     runs-on: ${{ matrix.os }}
-
     steps:
-      - name: Check out repository
+      - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Zig
         uses: mlugg/setup-zig@v2
 
       - name: Install dependencies (Linux)
-        if: matrix.name == 'linux'
+        if: startsWith(matrix.name, 'linux')
         run: |
           sudo apt-get update
-          sudo apt-get install -y libcurl4-openssl-dev
-
-      - name: Build release binaries (Linux)
-        if: matrix.name == 'linux'
+          sudo apt-get install -y libcurl4-openssl-dev pkg-config
+      
+      - name: Install dependencies (macOS)
+        if: startsWith(matrix.name, 'macos')
         run: |
-          # Build native (x86_64 glibc)
-          zig build -Doptimize=ReleaseSafe
-          mkdir -p release/x86_64-linux-gnu
-          cp zig-out/bin/cchd release/x86_64-linux-gnu/
+          brew install curl
+          # Set environment variables for Zig to find curl
+          echo "PKG_CONFIG_PATH=/opt/homebrew/opt/curl/lib/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
+
+      - name: Update version
+        run: |
+          # Extract version from tag
+          TAG=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG#v}
+          echo "Updating version to $VERSION"
+          ./.github/workflows/scripts/update-version.sh "$VERSION"
           
-          # Build x86_64 musl (this might fail due to curl, so we'll make it optional)
-          zig build -Dtarget=x86_64-linux-musl -Doptimize=ReleaseSafe || echo "musl build failed, skipping"
-          if [ -f zig-out/bin/cchd ]; then
-            mkdir -p release/x86_64-linux-musl
-            cp zig-out/bin/cchd release/x86_64-linux-musl/
-          fi
-
-      - name: Build release binaries (macOS)
-        if: matrix.name == 'macos'
-        run: |
-          # Build for native architecture only
-          zig build -Doptimize=ReleaseSafe
-          ARCH=$(uname -m)
-          if [ "$ARCH" = "arm64" ]; then
-            mkdir -p release/aarch64-apple-darwin
-            cp zig-out/bin/cchd release/aarch64-apple-darwin/
-          else
-            mkdir -p release/x86_64-apple-darwin
-            cp zig-out/bin/cchd release/x86_64-apple-darwin/
-          fi
-
-      - name: Create release archives
-        run: |
-          cd release
-          for dir in */; do
-            triple="${dir%/}"
-            tar -czf "cchd-${triple}.tar.gz" -C "$dir" cchd
-          done
-          cd ..
+      - name: Build binaries
+        env:
+          BUILD_TARGETS: ${{ matrix.targets }}
+          PLATFORM_NAME: ${{ matrix.name }}
+        run: ./.github/workflows/scripts/release.sh
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: release-${{ matrix.name }}
-          path: release/*.tar.gz
+          name: binaries-${{ matrix.name }}
+          path: dist/*
+          retention-days: 1
 
   release:
     needs: build
     runs-on: namespace-profile-default
-    
-    permissions:
-      contents: write
-
     steps:
-      - name: Check out repository
+      - name: Checkout
         uses: actions/checkout@v4
-        
+        with:
+          fetch-depth: 0
+
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
-          
-      - name: Prepare release files
-        run: |
-          mkdir -p release
-          mv artifacts/*/*.tar.gz release/
-          ls -la release/
+          path: dist
+          pattern: binaries-*
+          merge-multiple: true
 
       - name: Set up minisign
         run: |
           curl -L https://github.com/jedisct1/minisign/releases/latest/download/minisign-0.12-linux.tar.gz -o minisign.tar.gz
           tar -xf minisign.tar.gz
-          echo "$GITHUB_WORKSPACE/minisign-linux/x86_64/" >> $GITHUB_PATH
+          sudo mv minisign-linux/x86_64/minisign /usr/local/bin/
+          rm -rf minisign.tar.gz minisign-linux ._minisign-linux
 
-      - name: Sign release binaries
+      - name: Create minisign key files
         env:
           MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
           MINISIGN_PUBLIC_KEY: ${{ secrets.MINISIGN_PUBLIC_KEY }}
+        run: |
+          echo "$MINISIGN_SECRET_KEY" > minisign.key
+          echo "$MINISIGN_PUBLIC_KEY" > minisign.pub
+
+      - name: Create release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
         run: |
-          if [ -n "$MINISIGN_SECRET_KEY" ] && [ -n "$MINISIGN_PUBLIC_KEY" ]; then
-            echo "Signing release binaries..."
-            echo "$MINISIGN_SECRET_KEY" > minisign.key
-            
-            # Sign each file with password provided via stdin
-            for file in release/*.tar.gz; do
-              echo "$MINISIGN_PASSWORD" | minisign -S -s minisign.key -m "$file"
-            done
-            
-            echo "$MINISIGN_PUBLIC_KEY" > release/minisign.pub
-            rm minisign.key
-          else
-            echo "Skipping signing - minisign secrets not configured"
+          # Get version
+          TAG=$(git describe --exact-match --tags HEAD)
+          VERSION=${TAG#v}
+          
+          # Create archives with renamed binary
+          cd dist
+          if [ -f cchd-linux-amd64 ]; then
+            mv cchd-linux-amd64 cchd
+            tar -czf cchd-linux-x64.tar.gz cchd
+            mv cchd cchd-linux-amd64
           fi
+          if [ -f cchd-linux-arm64 ]; then
+            mv cchd-linux-arm64 cchd
+            tar -czf cchd-linux-arm64.tar.gz cchd
+            mv cchd cchd-linux-arm64
+          fi
+          if [ -f cchd-darwin-amd64 ]; then
+            mv cchd-darwin-amd64 cchd
+            tar -czf cchd-darwin-x64.tar.gz cchd
+            mv cchd cchd-darwin-amd64
+          fi
+          if [ -f cchd-darwin-arm64 ]; then
+            mv cchd-darwin-arm64 cchd
+            tar -czf cchd-darwin-arm64.tar.gz cchd
+            mv cchd cchd-darwin-arm64
+          fi
+          
+          # Create checksums
+          sha256sum *.tar.gz > checksums.txt
+          
+          # Sign with minisign
+          for file in *.tar.gz checksums.txt; do
+            echo "$MINISIGN_PASSWORD" | minisign -Sm "$file" -s ../minisign.key
+          done
+          
+          # Copy public key
+          cp ../minisign.pub .
+          
+          cd ..
+          
+          # Create release notes
+          cat > release-notes.md << EOF
+          ## Claude Hooks Dispatcher v${VERSION}
+          
+          Bridge between Claude Code hooks and custom HTTP servers.
+          
+          ## Installation
+          
+          ### macOS/Linux
+          \`\`\`bash
+          curl -fsSL https://raw.githubusercontent.com/sammyjoyce/cchd/main/install | bash
+          \`\`\`
+          
+          ### Verify Signatures
+          
+          All binaries are signed with minisign. The public key is included in the release assets as \`minisign.pub\`.
+          
+          To verify:
+          \`\`\`bash
+          # Download the public key
+          curl -LO https://github.com/sammyjoyce/cchd/releases/latest/download/minisign.pub
+          
+          # Verify an archive
+          minisign -Vm cchd-<platform>.tar.gz -p minisign.pub
+          \`\`\`
+          
+          ---
+          **Full Changelog**: https://github.com/sammyjoyce/cchd/compare/$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "v0.0.0")...${TAG}
+          EOF
+          
+          # Create GitHub release
+          gh release create "$TAG" \
+            --title "v${VERSION}" \
+            --notes-file release-notes.md \
+            dist/*.tar.gz \
+            dist/checksums.txt \
+            dist/*.minisig \
+            dist/minisign.pub
 
-      - name: List release files
-        run: ls -la release/
-        
-      - name: Publish release
-        uses: softprops/action-gh-release@v2
-        with:
-          draft: false
-          files: release/*
-          body: |
-            ## Installation
-
-            Download the appropriate binary for your platform and extract:
-
-            ```sh
-            # macOS ARM64 (Apple Silicon) - Built on ARM64 runner
-            curl -L https://github.com/sammyjoyce/cchd/releases/download/${{ github.ref_name }}/cchd-aarch64-apple-darwin.tar.gz | tar -xz
-            
-            # Linux x86_64 (glibc)
-            curl -L https://github.com/sammyjoyce/cchd/releases/download/${{ github.ref_name }}/cchd-x86_64-linux-gnu.tar.gz | tar -xz
-            
-            # Linux x86_64 (musl) - for Alpine Linux and other musl-based systems
-            curl -L https://github.com/sammyjoyce/cchd/releases/download/${{ github.ref_name }}/cchd-x86_64-linux-musl.tar.gz | tar -xz
-            ```
-            
-            **Note:** macOS x86_64 binaries are not included in this release. macOS users on Intel can build from source.
-
-            ## Verification
-
-            If signed, archived binary files can be verified as follows:
-            ```sh
-            minisign -Vm <archive> -p minisign.pub
-            ```
-          generate_release_notes: true
+      - name: Clean up
+        if: always()
+        run: rm -f minisign.key minisign.pub

@@ -42,3 +42,6 @@ hook_dispatcher
 # Minisign keys
 minisign.key
 minisign.pub
+# Added by goreleaser init:
+dist/
+.intentionally-empty-file.o

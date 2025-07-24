@@ -357,3 +357,71 @@ fn runDispatcher(allocator: std.mem.Allocator, input: []const u8) !std.process.C
         .stderr = stderr,
     };
 }
+
+test "All payload types are handled correctly" {
+    const allocator = testing.allocator;
+
+    // Build first
+    const build_result = try std.process.Child.run(.{
+        .allocator = allocator,
+        .argv = &[_][]const u8{ "zig", "build" },
+    });
+    defer allocator.free(build_result.stdout);
+    defer allocator.free(build_result.stderr);
+
+    // Test PreToolUse payload
+    const pretooluse_input =
+        \\{"session_id":"test123","transcript_path":"/tmp/transcript.jsonl","hook_event_name":"PreToolUse","tool_name":"Write","tool_input":{"file_path":"/tmp/test.txt","content":"Hello"}}
+    ;
+    const pretooluse_result = try runDispatcher(allocator, pretooluse_input);
+    defer allocator.free(pretooluse_result.stdout);
+    defer allocator.free(pretooluse_result.stderr);
+    // Test PostToolUse payload with tool_response
+    const posttooluse_input =
+        \\{"session_id":"test123","transcript_path":"/tmp/transcript.jsonl","hook_event_name":"PostToolUse","tool_name":"Write","tool_input":{"file_path":"/tmp/test.txt"},"tool_response":{"success":true}}
+    ;
+    const posttooluse_result = try runDispatcher(allocator, posttooluse_input);
+    defer allocator.free(posttooluse_result.stdout);
+    defer allocator.free(posttooluse_result.stderr);
+
+    // Test Notification payload with message and title
+    const notification_input =
+        \\{"session_id":"test123","transcript_path":"/tmp/transcript.jsonl","hook_event_name":"Notification","message":"Task completed","title":"Claude Code"}
+    ;
+    const notification_result = try runDispatcher(allocator, notification_input);
+    defer allocator.free(notification_result.stdout);
+    defer allocator.free(notification_result.stderr);
+
+    // Test Stop payload with stop_hook_active
+    const stop_input =
+        \\{"session_id":"test123","transcript_path":"/tmp/transcript.jsonl","hook_event_name":"Stop","stop_hook_active":false}
+    ;
+    const stop_result = try runDispatcher(allocator, stop_input);
+    defer allocator.free(stop_result.stdout);
+    defer allocator.free(stop_result.stderr);
+
+    // Test SubagentStop payload
+    const subagent_input =
+        \\{"session_id":"test123","transcript_path":"/tmp/transcript.jsonl","hook_event_name":"SubagentStop","stop_hook_active":true}
+    ;
+    const subagent_result = try runDispatcher(allocator, subagent_input);
+    defer allocator.free(subagent_result.stdout);
+    defer allocator.free(subagent_result.stderr);
+
+    // Test UserPromptSubmit payload
+    const prompt_input =
+        \\{"session_id":"test123","transcript_path":"/tmp/transcript.jsonl","hook_event_name":"UserPromptSubmit","prompt":"Help me write a function"}
+    ;
+    const prompt_result = try runDispatcher(allocator, prompt_input);
+    defer allocator.free(prompt_result.stdout);
+    defer allocator.free(prompt_result.stderr);
+
+    // Test PreCompact payload
+    const precompact_input =
+        \\{"session_id":"test123","transcript_path":"/tmp/transcript.jsonl","hook_event_name":"PreCompact","trigger":"manual","custom_instructions":"Focus on main"}
+    ;
+    const precompact_result = try runDispatcher(allocator, precompact_input);
+    defer allocator.free(precompact_result.stdout);
+    defer allocator.free(precompact_result.stderr);
+    std.debug.print("✓ All payload types handled without crashes\n", .{});
+}

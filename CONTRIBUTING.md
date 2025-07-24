@@ -109,10 +109,57 @@ docs(readme): update installation instructions
 
 ### Testing
 
+#### Running Tests
+
+```bash
+# Run all tests
+zig build test
+
+# Run tests with verbose output
+zig build test --verbose
+
+# Test with different optimization levels
+zig build test -Doptimize=Debug
+zig build test -Doptimize=ReleaseSafe
+zig build test -Doptimize=ReleaseFast
+
+# Run specific test
+zig test src/cchd.c
+```
+
+#### Writing Tests
+
 - Write tests for new functionality in `test.zig`
 - Ensure all existing tests pass
 - Test on multiple platforms if possible
 - Include integration tests for protocol changes
+- Test error conditions and edge cases
+- Add tests for platform-specific code
+
+Example test:
+```zig
+test "parse JSON with nested objects" {
+    const json = 
+        \\{"tool_name": "Write", "tool_input": {"file_path": "/tmp/test.txt"}}
+    ;
+    
+    var doc = yyjson_read(json.ptr, json.len, 0);
+    defer yyjson_doc_free(doc);
+    
+    const root = yyjson_doc_get_root(doc);
+    const tool_name = yyjson_obj_get(root, "tool_name");
+    
+    try testing.expectEqualStrings("Write", yyjson_get_str(tool_name));
+}
+```
+
+#### Test Coverage
+
+While Zig doesn't have built-in coverage tools, ensure:
+- All new functions have tests
+- Error paths are tested
+- Platform-specific code is tested on relevant platforms
+- Memory management is tested (no leaks)
 
 ### Documentation
 
@@ -120,6 +167,53 @@ docs(readme): update installation instructions
 - Update PROTOCOL.md for protocol changes
 - Add inline comments for complex logic
 - Update example servers if needed
+
+## Coding Standards
+
+### C Code Style
+
+- Use 4 spaces for indentation
+- Opening braces on same line for functions
+- Use descriptive variable names
+- Add comments for complex logic
+- Keep functions focused and small
+
+Example:
+```c
+int process_hook_input(const char* input, size_t len) {
+    // Validate input parameters
+    if (!input || len == 0) {
+        return -1;
+    }
+    
+    // Parse JSON input
+    yyjson_doc* doc = yyjson_read(input, len, 0);
+    if (!doc) {
+        fprintf(stderr, "Failed to parse JSON\n");
+        return -1;
+    }
+    
+    // Process the document
+    int result = handle_hook_event(doc);
+    
+    yyjson_doc_free(doc);
+    return result;
+}
+```
+
+### Error Handling
+
+- Always check return values
+- Provide meaningful error messages
+- Clean up resources on error paths
+- Use early returns for error conditions
+
+### Memory Management
+
+- Free all allocated memory
+- Use RAII patterns where possible
+- Check for allocation failures
+- Avoid memory leaks in error paths
 
 ## Project Structure
 
