@@ -105,11 +105,17 @@ jobs:
         env:
           MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
           MINISIGN_PUBLIC_KEY: ${{ secrets.MINISIGN_PUBLIC_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
         run: |
           if [ -n "$MINISIGN_SECRET_KEY" ] && [ -n "$MINISIGN_PUBLIC_KEY" ]; then
             echo "Signing release binaries..."
             echo "$MINISIGN_SECRET_KEY" > minisign.key
-            minisign -S -s minisign.key -m release/*.tar.gz
+            
+            # Sign each file with password provided via stdin
+            for file in release/*.tar.gz; do
+              echo "$MINISIGN_PASSWORD" | minisign -S -s minisign.key -m "$file"
+            done
+            
             echo "$MINISIGN_PUBLIC_KEY" > release/minisign.pub
             rm minisign.key
           else

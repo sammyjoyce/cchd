@@ -38,3 +38,7 @@ test_runner
 hook_dispatcher
 *.o
 *.a
+
+# Minisign keys
+minisign.key
+minisign.pub
