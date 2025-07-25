@@ -3,16 +3,16 @@
 [![CI](https://github.com/sammyjoyce/cchd/actions/workflows/ci.yaml/badge.svg)](https://github.com/sammyjoyce/cchd/actions/workflows/ci.yaml)
 [![Release](https://img.shields.io/github/v/release/sammyjoyce/cchd)](https://github.com/sammyjoyce/cchd/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![C](https://img.shields.io/badge/C-11-blue.svg)](https://en.wikipedia.org/wiki/C11_(C_standard_revision))
-[![Zig Version](https://img.shields.io/badge/Zig-0.14.1-orange.svg)](https://ziglang.org/)
+[![C](https://img.shields.io/badge/C-23-blue.svg)](https://en.wikipedia.org/wiki/C23)
+[![Zig Version](https://img.shields.io/badge/Zig-master-orange.svg)](https://ziglang.org/)
 
-> The fundamental problem of communication is that of reproducing at one point either exactly or approximately a message selected at another point.” — Claude Shannon
+> The fundamental problem of communication is that of reproducing at one point either exactly or approximately a message selected at another point." — Claude Shannon
 
-A lightweight bridge between Claude Code hooks and custom HTTP servers. Designed for safety, performance, and developer experience—in that order.
+A lightweight bridge between Claude Code hooks and local or remote servers.
 
 ## Why
 
-Claude Hooks Dispatcher (cchd) is a simple, fast dispatcher that transforms Claude events into a clean protocol, queries your server, and enforces decisions with precision.
+Claude Hooks Dispatcher (cchd) is a simple, fast dispatcher that transforms Claude events into a clean protocol, queries your server, and enforces decisions with precision. We built this because Claude Code's hook system needs a reliable bridge to custom security policies, and existing solutions were either too complex or too slow for production use.
 
 ## Installation
 
@@ -25,18 +25,20 @@ curl -sSL https://raw.githubusercontent.com/sammyjoyce/cchd/main/install | bash
 ```
 
 This will:
-- Download the latest signed release
-- Verify signature (if minisign is available)
-- Install to `~/.cchd/bin`
-- Configure your shell PATH
-- Setup `~/.claude/settings.json`
+
+- Download the latest signed release.
+- Verify signature (if minisign is available) to ensure authenticity.
+- Install to `~/.cchd/bin` to avoid requiring sudo privileges.
+- Configure your shell PATH for immediate availability.
+- Setup `~/.claude/settings.json` with sensible defaults.
 
 ### Manual Build from Source
 
 Requirements:
-- Zig 0.14.1+ (install via brew or https://ziglang.org/download/)
-- C compiler for yyjson
-- libcurl dev headers
+
+- Zig master branch (install via zvm: https://github.com/tristanisham/zvm). We use master for the latest C23 support.
+- libcurl dev headers for HTTP communication.
+- Uses arocc (https://github.com/Vexu/arocc) for C compilation because it provides better C23 compatibility than system compilers.
 
 ```bash
 git clone https://github.com/sammyjoyce/cchd.git
@@ -47,33 +49,75 @@ sudo cp zig-out/bin/cchd /usr/local/bin/
 
 ### Verify Installation
 
-Check it's in PATH:
+Check it's in PATH to ensure the installation succeeded:
 
 ```bash
 cchd --version
 ```
 
-Test the dispatcher:
+Test the dispatcher to verify it can process hook events:
 
 ```bash
 echo '{"session_id":"test123","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ls"}}' | cchd
 ```
 
-Note: This will fail with "Failed to parse input JSON" if no server is running, which is expected.
+Note: This will fail with a connection error if no server is running, which is expected. This error confirms the dispatcher is working but has no server to connect to.
+
+### Initialize a Template
+
+Create a hook server template in your preferred language:
+
+```bash
+# Interactive selection
+cchd init
+
+# Or specify language directly
+cchd init python
+cchd init typescript
+cchd init go
+```
 
 ## How It Works
 
-1. Claude emits hook event to stdin.
-2. cchd reads (bounded buffer), parses (yyjson), transforms to protocol.
-3. Sends to your HTTP server (retries with backoff).
-4. Server decides: allow (200, {"decision":"allow"}), block (200, {"decision":"block"}), modify (200, {"decision":"modify", "modified_data":{...}}).
-5. cchd enforces: exit 0/1, outputs original or modified.
+1. Claude emits hook events to stdin.
+2. cchd reads the event using bounded buffers (preventing memory exhaustion), parses with yyjson (for speed), and transforms to the CloudEvent schema.
+3. Sends the transformed event to your HTTP server with automatic retries and exponential backoff to handle transient failures.
+4. Your server responds with a decision: allow (200, {"decision":"allow"}), block (200, {"decision":"block"}), or modify (200, {"decision":"modify", "modified_data":{...}}). This gives you complete control over Claude's behavior.
+5. cchd enforces the decision by exiting with appropriate codes (0 for allow, 1 for block) and outputs either the original or modified data.
 
-Control flow stays yours: batch if needed in your server.
+Control flow stays with your server - you can batch decisions, check against policy engines, or integrate with existing security infrastructure.
 
 ## Configuration
 
-Scripts create `~/.claude/settings.json` with defaults. Edit for your servers:
+cchd can be configured through multiple methods, listed in order of priority (highest to lowest). This hierarchy allows you to override settings for specific use cases while maintaining global defaults:
+
+1. **Command-line flags** (highest priority)
+2. **Environment variables**
+3. **Configuration file** (~/.config/cchd/config.json)
+4. **Default values**
+
+### Configuration File
+
+Create a configuration file at one of these locations:
+
+- `$CCHD_CONFIG_PATH` (if set)
+- `~/.config/cchd/config.json`
+- `/etc/cchd/config.json`
+
+Example `config.json` with common settings:
+
+```json
+{
+  "server_url": "https://my-server.com/hook",
+  "timeout_ms": 10000,
+  "fail_open": false,
+  "debug": false
+}
+```
+
+### Claude Settings
+
+The installer creates `~/.claude/settings.json` with defaults. Edit this file to configure which hooks are active and which server handles each event type:
 
 ```json
 {
@@ -155,7 +199,7 @@ Scripts create `~/.claude/settings.json` with defaults. Edit for your servers:
 }
 ```
 
-Per-hook options:
+Per-hook options allow different servers or settings for each event type. This flexibility lets you route security-critical events to one server while sending informational events elsewhere:
 
 ```json
 {
@@ -177,7 +221,7 @@ Per-hook options:
         "hooks": [
           {
             "type": "command",
-            "command": "cchd --server http://localhost:8081/hook --fail-closed"
+            "command": "cchd --server http://localhost:8081/hook"
           }
         ]
       }
@@ -186,31 +230,59 @@ Per-hook options:
 }
 ```
 
-Flags:
+### Command-line Options
 
-- `--server URL`: Endpoint (default: http://localhost:8080/hook).
-- `--timeout MS`: Milliseconds (default: 5000).
-- `--fail-closed`: Block if server down (default: fail-open).
+- `--server URL`: HTTP server endpoint (default: http://localhost:8080/hook). Use HTTPS in production.
+- `--timeout MS`: Request timeout in milliseconds (default: 5000). Increase for slower servers.
+- `--fail-open`: Allow operations if server is unavailable (default behavior is fail-closed for security).
+- `--api-key KEY`: Set API key for server authentication.
+- `-d, --debug`: Enable debug output to troubleshoot connection issues.
+- `-q, --quiet`: Suppress non-essential output for cleaner logs.
+- `--json`: Output in JSON format for programmatic consumption.
+- `--plain`: Output in plain text format without formatting.
+- `--no-color`: Disable colored output (also respects NO_COLOR environment variable).
+- `--no-input`: Exit immediately without reading input (useful for testing).
+- `--insecure`: Disable SSL certificate verification (use with caution in development only).
+- `-h, --help`: Show detailed help with examples.
+- `--version`: Show version information for bug reports.
 
-Env: `HOOK_SERVER_URL` overrides default.
+### Environment Variables
 
-## Protocol
-
-Detailed in [src/PROTOCOL.md](src/PROTOCOL.md): Versioned JSON, event metadata, data. Why? Compatibility, extensibility.
+- `HOOK_SERVER_URL`: Default server URL (overridden by --server flag). Useful for containerized deployments.
+- `HOOK_API_KEY`: API key for authentication.
+- `CCHD_CONFIG_PATH`: Path to configuration file when not using default locations.
+- `NO_COLOR`: Disable colored output when set. Follows the NO_COLOR standard for accessibility.
 
 ## Quick Start Templates
 
-In `templates/`: Minimal templates with placeholder functions for each hook event type.
+The easiest way to get started is using the `init` command, which creates a working hook server template in your preferred language. These templates include placeholder functions for each hook event type, helping you get started quickly without wrestling with protocol details or boilerplate code.
 
-### Install and Run a Template
+### Create a Template
 
-Choose your preferred language:
+Use the init command to create a hook server:
+
+```bash
+# Interactive selection - choose from available languages
+cchd init
+
+# Or specify your language directly
+cchd init python
+cchd init typescript
+cchd init go
+```
+
+This will:
+- Download the appropriate template for your language
+- Save it to your current directory as `hook-server.<ext>`
+- Display instructions for running the server
+
+### Run Your Server
+
+After initialization, run your server based on the language:
 
 #### Python
-```bash
-# Copy template to your project
-curl -sSL https://raw.githubusercontent.com/sammyjoyce/cchd/main/templates/quickstart-python.py -o hook-server.py
 
+```bash
 # Run with uv (installs dependencies automatically)
 uv run hook-server.py
 
@@ -220,67 +292,61 @@ python hook-server.py
 ```
 
 #### TypeScript
-```bash
-# Copy template to your project
-curl -sSL https://raw.githubusercontent.com/sammyjoyce/cchd/main/templates/quickstart-typescript.ts -o hook-server.ts
 
+```bash
 # Run with Bun
 bun run hook-server.ts
 ```
 
 #### Go
-```bash
-# Copy template to your project
-curl -sSL https://raw.githubusercontent.com/sammyjoyce/cchd/main/templates/quickstart-go.go -o hook-server.go
 
+```bash
 # Run directly
 go run hook-server.go
 ```
 
-These templates provide:
-- Separate handler functions for each event type (PreToolUse, PostToolUse, etc.)
-- Type definitions for request/response structures
-- Basic logging of event data
-- Comments showing where to add your custom logic
+### What Templates Provide
 
-
+- Separate handler functions for each event type (PreToolUse, PostToolUse, etc.) to keep your code organized.
+- Type definitions for request/response structures to prevent common errors.
+- Basic logging of event data so you can see what Claude is doing.
+- Clear comments showing exactly where to add your custom logic—no guesswork required.
 
 ## Testing
 
-Exhaustive:
+Run the comprehensive test suite:
 
 ```bash
 zig build test
 ```
 
-Covers: Builds, fail modes, servers, responses, codes.
+The test suite covers: build verification, failure modes, template servers, response handling, and exit codes. This exhaustive testing ensures reliability across different configurations and error scenarios.
 
 ## Structure
 
-- `src/`: Core.
-  - `cchd.c`: Dispatcher.
-  - `PROTOCOL.md`: Spec.
-- `templates/`: Quick start templates.
-- `build.zig`: Config.
-- `test.zig`: Suite.
-- `install`: Universal install script.
+- `src/`: Core implementation.
+  - `cchd.c`: Main dispatcher handling all event processing.
+- `templates/`: Quick start templates for Python, TypeScript, and Go.
+- `build.zig`: Build configuration using Zig's build system.
+- `test.zig`: Comprehensive test suite with real server integration.
+- `install`: Universal install script that works across platforms.
 
 ## Requirements
 
-Build: Zig 0.14.1+, C compiler, libcurl-dev.
+Build requirements: Zig (master branch recommended for best C23 support), C compiler, libcurl-dev (for HTTP).
 
-Runtime: libcurl (yyjson static-linked).
+Runtime requirements: Only libcurl is needed at runtime. yyjson is statically linked to avoid dependency issues.
 
 ## Troubleshooting
 
-- macOS brew missing: https://brew.sh.
-- Linux libcurl: `apt install libcurl4-openssl-dev` (Ubuntu), etc.
-- Not in PATH: Add `/usr/local/bin`.
-- Hooks fail: Check Claude version, JSON syntax, server, manual test.
+- macOS brew missing: Install from https://brew.sh to get required dependencies.
+- Linux libcurl missing: Install with `apt install libcurl4-openssl-dev` (Ubuntu/Debian) or equivalent for your distribution.
+- Command not found: Add `/usr/local/bin` to your PATH or use the installer which handles this automatically.
+- Hooks not triggering: Check Claude Code version supports hooks, verify JSON syntax in settings.json, ensure server is running, and test manually with the echo command above.
 
 ## OpenCLI Compliance
 
-This project adheres to the [OpenCLI specification](https://opencli.org/). The CLI interface is documented in `opencli.json`, which can be used by documentation generators, auto-completion tools, and other OpenCLI-compatible utilities.
+This project adheres to the [OpenCLI specification](https://opencli.org/). The CLI interface is documented in `opencli.json`, which can be used by documentation generators, auto-completion tools, and other OpenCLI-compatible utilities. This standardization ensures consistent behavior and enables better tooling integration.
 
 ## License
 

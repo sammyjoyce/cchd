@@ -1,13 +1,17 @@
 .{
     .name = .cchd,
-    .version = "0.1.0",
+    .version = "0.2.0",
     .fingerprint = 0xa5bdb666a1ff46a2,
-    .minimum_zig_version = "0.14.1",
+    .minimum_zig_version = "0.15.0",
     .dependencies = .{
         .yyjson = .{
             .url = "https://github.com/ibireme/yyjson/archive/refs/tags/0.8.0.tar.gz",
             .hash = "1220b45dbd7449340e78eb6e202d0af33c37c1b6cd88c0fdb7602a3fcd7cdc53aaf0",
             .lazy = false,
+        },
+        .aro = .{
+            .url = "git+https://github.com/Vexu/arocc.git#5204da998cb6d966bbb39d3ccf687b6b008cebc6",
+            .hash = "aro-0.0.0-JSD1Qoo5JwCkk_CCd5vC-cz9sVxAXJylRZWnJABV36TC",
         },
     },
     .paths = .{

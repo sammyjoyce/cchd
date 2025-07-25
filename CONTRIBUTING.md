@@ -164,7 +164,6 @@ While Zig doesn't have built-in coverage tools, ensure:
 ### Documentation
 
 - Update README.md for user-facing changes
-- Update PROTOCOL.md for protocol changes
 - Add inline comments for complex logic
 - Update example servers if needed
 
@@ -220,9 +219,7 @@ int process_hook_input(const char* input, size_t len) {
 ```
 cchd/
 ├── src/              # Core implementation
-│   ├── cchd.c       # Main dispatcher
-│   ├── PROTOCOL.md  # Protocol specification
-│   └── README.md    # Implementation details
+│   └── cchd.c       # Main dispatcher
 ├── examples/         # Example servers
 ├── build.zig        # Build configuration
 ├── test.zig         # Test suite

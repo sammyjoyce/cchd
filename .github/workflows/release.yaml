@@ -29,6 +29,8 @@ jobs:
 
       - name: Set up Zig
         uses: mlugg/setup-zig@v2
+        with:
+          version: master
 
       - name: Install dependencies (Linux)
         if: startsWith(matrix.name, 'linux')
@@ -39,7 +41,7 @@ jobs:
       - name: Install dependencies (macOS)
         if: startsWith(matrix.name, 'macos')
         run: |
-          brew install curl
+          brew reinstall curl
           # Set environment variables for Zig to find curl
           echo "PKG_CONFIG_PATH=/opt/homebrew/opt/curl/lib/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
 

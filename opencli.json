@@ -3,7 +3,7 @@
   "info": {
     "title": "Claude Code Hooks Dispatcher",
     "description": "A lightweight bridge between Claude Code hooks and custom HTTP servers. Designed for safety, performance, and developer experience.",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "contact": {
       "name": "Sam Joyce",
       "url": "https://github.com/sammyjoyce/cchd"
@@ -19,6 +19,20 @@
   },
   "arguments": [],
   "options": [
+    {
+      "name": "help",
+      "required": false,
+      "aliases": ["h"],
+      "arguments": [],
+      "description": "Show detailed help with examples and exit"
+    },
+    {
+      "name": "version",
+      "required": false,
+      "aliases": [],
+      "arguments": [],
+      "description": "Show version information and exit"
+    },
     {
       "name": "server",
       "required": false,
@@ -56,14 +70,105 @@
       "description": "Request timeout in milliseconds (default: 5000)"
     },
     {
-      "name": "fail-closed",
+      "name": "fail-open",
       "required": false,
       "aliases": [],
       "arguments": [],
-      "description": "Block operations if server is unavailable (default: fail-open)"
+      "description": "Allow operations if server is unavailable (default: fail-closed)"
+    },
+    {
+      "name": "quiet",
+      "required": false,
+      "aliases": ["q"],
+      "arguments": [],
+      "description": "Suppress non-essential output"
+    },
+    {
+      "name": "debug",
+      "required": false,
+      "aliases": ["d"],
+      "arguments": [],
+      "description": "Enable debug output (DEBUG level logs)"
+    },
+    {
+      "name": "api-key",
+      "required": false,
+      "aliases": [],
+      "arguments": [
+        {
+          "name": "key",
+          "required": true,
+          "ordinal": 1,
+          "arity": {
+            "minimum": 1,
+            "maximum": 1
+          },
+          "description": "API key for authentication"
+        }
+      ],
+      "description": "Set API key for server authentication"
+    },
+    {
+      "name": "json",
+      "required": false,
+      "aliases": [],
+      "arguments": [],
+      "description": "Output in JSON format"
+    },
+    {
+      "name": "plain",
+      "required": false,
+      "aliases": [],
+      "arguments": [],
+      "description": "Output in plain text format"
+    },
+    {
+      "name": "no-color",
+      "required": false,
+      "aliases": [],
+      "arguments": [],
+      "description": "Disable colored output"
+    },
+    {
+      "name": "no-input",
+      "required": false,
+      "aliases": [],
+      "arguments": [],
+      "description": "Exit immediately without reading input"
+    },
+    {
+      "name": "insecure",
+      "required": false,
+      "aliases": [],
+      "arguments": [],
+      "description": "Disable SSL certificate verification (use with caution)"
     }
   ],
-  "commands": [],
+  "commands": [
+    {
+      "name": "init",
+      "description": "Initialize a hook server template in your preferred language",
+      "options": [],
+      "arguments": [
+        {
+          "name": "language",
+          "required": false,
+          "ordinal": 1,
+          "arity": {
+            "minimum": 0,
+            "maximum": 1
+          },
+          "description": "Template language: python, typescript, or go"
+        }
+      ],
+      "examples": [
+        "cchd init",
+        "cchd init python",
+        "cchd init typescript",
+        "cchd init go"
+      ]
+    }
+  ],
   "exitCodes": [
     {
       "code": 0,
@@ -72,6 +177,10 @@
     {
       "code": 1,
       "description": "Failure - operation blocked or error occurred"
+    },
+    {
+      "code": 2,
+      "description": "Ask - user approval required (PreToolUse hooks only)"
     }
   ],
   "examples": [
@@ -86,7 +195,8 @@
       "value": {
         "type": "stdin",
         "format": "json",
-        "description": "Reads Claude hook event JSON from stdin"
+        "description": "Reads Claude hook event JSON from stdin",
+        "schema": "Claude Code hook event format with fields: session_id, hook_event_name, tool_name, tool_input, etc."
       }
     },
     {
@@ -94,13 +204,41 @@
       "value": {
         "type": "stdout",
         "format": "json",
-        "description": "Outputs original or modified JSON to stdout"
+        "description": "Outputs original or modified JSON to stdout",
+        "behavior": "Echoes input unless server provides modified_data or suppressOutput is true"
       }
     },
     {
       "name": "environment",
       "value": {
-        "HOOK_SERVER_URL": "Can be used to set default server URL instead of --server flag"
+        "HOOK_SERVER_URL": "Can be used to set default server URL instead of --server flag",
+        "CCHD_LOG_LEVEL": "Set logging verbosity: ERROR, WARNING, INFO, DEBUG (default: ERROR, overridden by -d flag)"
+      }
+    },
+    {
+      "name": "protocol",
+      "value": {
+        "format": "CloudEvents v1.0",
+        "transport": "HTTP POST",
+        "contentType": "application/json",
+        "retries": "3 attempts with exponential backoff",
+        "compression": "gzip, deflate supported"
+      }
+    },
+    {
+      "name": "security",
+      "value": {
+        "memory": "Secure memory allocation with mlock() and secure zeroing",
+        "inputLimit": "512KB maximum input size",
+        "timeout": "Configurable timeout to prevent hanging"
+      }
+    },
+    {
+      "name": "performance",
+      "value": {
+        "bufferSize": "128KB initial, 8KB chunks",
+        "curlReuse": "Connection reuse across retries",
+        "preAllocation": "Response buffer pre-allocated"
       }
     }
   ]

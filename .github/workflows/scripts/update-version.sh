@@ -1,5 +1,5 @@
 #!/bin/bash
-# Script to update version in build.zig.zon
+# Script to update version in all relevant files
 
 set -e
 
@@ -24,9 +24,24 @@ fi
 if [[ "$OSTYPE" == "darwin"* ]]; then
     # macOS
     sed -i '' "s/\.version = \"[0-9]*\.[0-9]*\.[0-9]*\"/.version = \"$VERSION\"/" build.zig.zon
+    
+    # Update version in build.zig
+    sed -i '' "s/const version_str = \"[0-9]*\.[0-9]*\.[0-9]*\"/const version_str = \"$VERSION\"/" build.zig
+    
+    # Update version in opencli.json
+    sed -i '' "s/\"version\": \"[0-9]*\.[0-9]*\.[0-9]*\"/\"version\": \"$VERSION\"/" opencli.json
 else
     # Linux
     sed -i "s/\.version = \"[0-9]*\.[0-9]*\.[0-9]*\"/.version = \"$VERSION\"/" build.zig.zon
+    
+    # Update version in build.zig
+    sed -i "s/const version_str = \"[0-9]*\.[0-9]*\.[0-9]*\"/const version_str = \"$VERSION\"/" build.zig
+    
+    # Update version in opencli.json
+    sed -i "s/\"version\": \"[0-9]*\.[0-9]*\.[0-9]*\"/\"version\": \"$VERSION\"/" opencli.json
 fi
 
-echo "Updated version to $VERSION in build.zig.zon"
+echo "Updated version to $VERSION in:"
+echo "  - build.zig.zon"
+echo "  - build.zig"
+echo "  - opencli.json"
